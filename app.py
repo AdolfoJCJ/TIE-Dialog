@@ -2,6 +2,7 @@ from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 # -------------------------
 # 🌐 Configuración e idioma
@@ -73,7 +74,9 @@ else:
 if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
-    # Calcular embeddings
+    # -------------------------
+    # 🔹 Calcular embeddings
+    # -------------------------
     model = SentenceTransformer('all-MiniLM-L6-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
@@ -84,21 +87,30 @@ else:
         similarities.append(sim)
     df['similarity'] = similarities
 
-    # Normalizar C_t dinámicamente en base a valores reales
+    # -------------------------
+    # 🔹 Normalizar C_t dinámicamente
+    # -------------------------
     min_sim = min(similarities[1:])
     max_sim = max(similarities[1:])
     range_sim = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / range_sim).clip(0, 1)
 
-    # Calcular Phi_t con mayor sensibilidad
+    # -------------------------
+    # 🔹 Calcular Phi_t mejorado
+    # -------------------------
     rolling_mean = df['C_t'].rolling(window=5, min_periods=1).mean()
     rolling_std = df['C_t'].rolling(window=5, min_periods=1).std().fillna(0)
 
-    alpha = 0.6
-    beta = 0.8
-    df['Phi_t'] = (alpha * rolling_mean - beta * rolling_std).clip(0, 1)
+    alpha = 0.6  # peso media móvil
+    beta = 0.8   # peso desviación estándar
+    gamma = 0.5  # penalización no lineal
 
-    # Clasificación de fases
+    penalizacion_dinamica = np.exp(-gamma * rolling_std)
+    df['Phi_t'] = (alpha * rolling_mean - beta * rolling_std * penalizacion_dinamica).clip(0, 1)
+
+    # -------------------------
+    # 🔹 Clasificación de fases
+    # -------------------------
     fases = []
     for c, p in zip(df['C_t'], df['Phi_t']):
         if c > p:
@@ -156,6 +168,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
