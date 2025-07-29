@@ -99,23 +99,58 @@ if uploaded_file:
         st.pyplot(fig)
 
         # -------------------------
-        # 🔍 Reporte
-        # -------------------------
-        st.subheader(t["report_title"][lang])
-        texto = f"""
-TIE–Dialog Report ({language})\n\nPromedio C_t: {df['C_t'].mean():.3f}\nPromedio Phi_t: {df['Phi_t'].mean():.3f}\nTurnos > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\nFases encontradas:\n"""
-        cambios = df['fase'].ne(df['fase'].shift()).cumsum()
-        resumen = df.groupby(cambios).first().reset_index()
-        for _, row in resumen.iterrows():
-            texto += f"Turno {row['turno'] if 'turno' in row else row.name+1}: {row['fase']}\n"
+       # -------------------------
+# 🔍 Reporte
+# -------------------------
+st.subheader(t["report_title"][lang])
 
-        st.markdown(f"```\n{texto}\n```")
+# Asegurar columna 'turno'
+if 'turno' not in df.columns:
+    df['turno'] = range(1, len(df) + 1)
 
-        # -------------------------
-        # 📄 Descarga
-        # -------------------------
-        st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt")
-        st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv")
+# Texto base del reporte (bilingüe)
+if lang == "es":
+    texto = (
+        f"TIE–Dialog Report (Español)\n\n"
+        f"Promedio C_t: {df['C_t'].mean():.3f}\n"
+        f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
+        f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+        f"Fases encontradas:\n"
+    )
+else:
+    texto = (
+        f"TIE–Dialog Report (English)\n\n"
+        f"Average C_t: {df['C_t'].mean():.3f}\n"
+        f"Average Phi_t: {df['Phi_t'].mean():.3f}\n"
+        f"Turns with C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+        f"Detected phases:\n"
+    )
+
+# Cambios de fase compactados (robusto, sin reset_index conflictivo)
+cambios = df['fase'].ne(df['fase'].shift()).cumsum()
+resumen = df.groupby(cambios, as_index=False).first()  # ✅ evita error de reset_index
+
+# Ordenar por turno por si el groupby altera el orden
+resumen = resumen.sort_values(by='turno')
+
+# Añadir las líneas al reporte
+for _, row in resumen.iterrows():
+    if lang == "es":
+        texto += f"Turno {int(row['turno'])}: {row['fase']}\n"
+    else:
+        texto += f"Turn {int(row['turno'])}: {row['fase']}\n"
+
+# Mostrar reporte
+st.markdown(f"```\n{texto}\n```")
+
+# ✅ Botón de descarga del reporte
+st.download_button(
+    label=t["download_txt"][lang],
+    data=texto,
+    file_name="reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt",
+    mime="text/plain"
+)
+
 
         # -------------------------
         # 🔍 Vista previa
