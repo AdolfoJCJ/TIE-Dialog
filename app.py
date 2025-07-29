@@ -84,14 +84,19 @@ else:
         similarities.append(sim)
     df['similarity'] = similarities
 
-    # Normalizar C_t al rango [0, 1] basado en similaridad
-    min_sim, max_sim = 0.5, 0.95
-    df['C_t'] = ((df['similarity'] - min_sim) / (max_sim - min_sim)).clip(0, 1)
+    # Normalizar C_t dinámicamente en base a valores reales
+    min_sim = min(similarities[1:])
+    max_sim = max(similarities[1:])
+    range_sim = max_sim - min_sim if max_sim > min_sim else 1.0
+    df['C_t'] = ((df['similarity'] - min_sim) / range_sim).clip(0, 1)
 
-    # Calcular Phi_t dinámico basado en la media móvil de la similaridad
+    # Calcular Phi_t con mayor sensibilidad
     rolling_mean = df['C_t'].rolling(window=5, min_periods=1).mean()
     rolling_std = df['C_t'].rolling(window=5, min_periods=1).std().fillna(0)
-    df['Phi_t'] = (rolling_mean - 0.2 * rolling_std).clip(0, 1)
+
+    alpha = 0.6
+    beta = 0.8
+    df['Phi_t'] = (alpha * rolling_mean - beta * rolling_std).clip(0, 1)
 
     # Clasificación de fases
     fases = []
@@ -151,6 +156,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
