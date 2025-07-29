@@ -1,4 +1,4 @@
-# TIE-Dialog multilingüe con selector de idioma y secciones con emojis
+# TIE-Dialog multilingüe completo con selector de idioma, reporte y descarga CSV/TXT
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -59,11 +59,12 @@ if uploaded_file:
     if 'coherencia' not in df.columns:
         st.error(t["error"][lang])
     else:
+        # Crear columnas base
         df['C_t'] = df['coherencia']
         df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
         df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
-        # Calculo umbral dinámico
+        # Calcular Phi_t
         phi_0, alpha, beta = 0.75, 0.3, 0.2
         phi_vals = []
         for i in range(len(df)):
@@ -99,64 +100,52 @@ if uploaded_file:
         st.pyplot(fig)
 
         # -------------------------
-       # -------------------------
-# 🔍 Reporte
-# -------------------------
-st.subheader(t["report_title"][lang])
+        # 🔍 Reporte
+        # -------------------------
+        st.subheader(t["report_title"][lang])
+        if 'turno' not in df.columns:
+            df['turno'] = range(1, len(df) + 1)
 
-# Asegurar columna 'turno'
-if 'turno' not in df.columns:
-    df['turno'] = range(1, len(df) + 1)
+        texto = (
+            f"TIE–Dialog Report ({'Español' if lang == 'es' else 'English'})\n\n"
+            f"Promedio C_t: {df['C_t'].mean():.3f}\n"
+            f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
+            f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+            f"Fases encontradas:\n"
+        )
 
-# Texto base del reporte (bilingüe)
-if lang == "es":
-    texto = (
-        f"TIE–Dialog Report (Español)\n\n"
-        f"Promedio C_t: {df['C_t'].mean():.3f}\n"
-        f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
-        f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
-        f"Fases encontradas:\n"
-    )
-else:
-    texto = (
-        f"TIE–Dialog Report (English)\n\n"
-        f"Average C_t: {df['C_t'].mean():.3f}\n"
-        f"Average Phi_t: {df['Phi_t'].mean():.3f}\n"
-        f"Turns with C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
-        f"Detected phases:\n"
-    )
+        cambios = df['fase'].ne(df['fase'].shift()).cumsum()
+        resumen = df.groupby(cambios, as_index=False).first()
+        resumen = resumen.sort_values(by='turno')
 
-# Cambios de fase compactados (robusto, sin reset_index conflictivo)
-cambios = df['fase'].ne(df['fase'].shift()).cumsum()
-resumen = df.groupby(cambios, as_index=False).first()  # ✅ evita error de reset_index
+        for _, row in resumen.iterrows():
+            texto += f"Turno {int(row['turno'])}: {row['fase']}\n" if lang == "es" else f"Turn {int(row['turno'])}: {row['fase']}\n"
 
-# Ordenar por turno por si el groupby altera el orden
-resumen = resumen.sort_values(by='turno')
-
-# Añadir las líneas al reporte
-for _, row in resumen.iterrows():
-    if lang == "es":
-        texto += f"Turno {int(row['turno'])}: {row['fase']}\n"
-    else:
-        texto += f"Turn {int(row['turno'])}: {row['fase']}\n"
-
-# Mostrar reporte
-st.markdown(f"```\n{texto}\n```")
-
-# ✅ Botón de descarga del reporte
-st.download_button(
-    label=t["download_txt"][lang],
-    data=texto,
-    file_name="reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt",
-    mime="text/plain"
-)
-
+        st.markdown(f"```\n{texto}\n```")
 
         # -------------------------
-        # 🔍 Vista previa
+        # 📄 Descargas
+        # -------------------------
+        st.download_button(
+            t["download_txt"][lang],
+            data=texto,
+            file_name="reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt",
+            mime="text/plain"
+        )
+
+        st.download_button(
+            t["download_csv"][lang],
+            data=df.to_csv(index=False),
+            file_name="datos_TIE_Dialog.csv" if lang == "es" else "TIE_Dialog_data.csv",
+            mime="text/csv"
+        )
+
+        # -------------------------
+        # 🔍 Vista previa de resultados
         # -------------------------
         st.subheader(t["preview"][lang])
         st.dataframe(df.head())
+
 
 
 
