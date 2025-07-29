@@ -1,0 +1,5 @@
+speaker,timestamp,text
+A,0,"Hola, ¿cómo estás?"
+B,1,"Bien, ¿y tú?"
+A,2,"He estado pensando en cómo la información estructura nuestras conversaciones."
+B,3,"Eso suena a algo que TIE–Dialog podría analizar bien."
