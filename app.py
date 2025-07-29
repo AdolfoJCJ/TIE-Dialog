@@ -73,28 +73,29 @@ else:
 if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
+    # Calcular embeddings y similitud
     model = SentenceTransformer('all-MiniLM-L6-v2')
     embeddings = model.encode(df['texto'].tolist(), convert_to_tensor=True)
-    similarities = [1.0]  # Primer turno no tiene anterior
+    similarities_raw = [1.0]  # Primer turno no tiene anterior
     for i in range(1, len(embeddings)):
         sim = util.cos_sim(embeddings[i], embeddings[i - 1]).item()
-        similarities.append(sim)
-    df['coherencia'] = similarities
-    df['C_t'] = df['coherencia'].astype(float)
+        similarities_raw.append(sim)
+    df['C_t_raw'] = similarities_raw
+
+    # Normalizar C_t al rango observado (más realista)
+    min_sim, max_sim = 0.5, 0.95
+    df['C_t'] = ((df['C_t_raw'] - min_sim) / (max_sim - min_sim)).clip(0, 1)
+
+    # Calcular medias móviles
     df['C_t_local'] = df['C_t'].rolling(3, min_periods=1).mean()
     df['C_t_Im'] = df['C_t'].ewm(span=4, adjust=False).mean()
 
-    phi_0, alpha, beta = 0.75, 0.4, 0.3
-    phi_vals = []
-    for i in range(len(df)):
-        if i < 3:
-            phi_vals.append(phi_0)
-        else:
-            w = df['C_t'][i-3:i]
-            phi_t = phi_0 + alpha * w.std() - beta * w.mean()
-            phi_vals.append(max(0, min(1, float(phi_t))))
-    df['Phi_t'] = phi_vals
+    # Calcular Phi_t dinámico ajustado
+    rolling_mean = df['C_t'].rolling(window=5, min_periods=1).mean()
+    rolling_std = df['C_t'].rolling(window=5, min_periods=1).std().fillna(0)
+    df['Phi_t'] = (rolling_mean + 0.5 * rolling_std - 0.15 * rolling_mean).clip(0, 1)
 
+    # Clasificación de fases
     fases = []
     for c, p in zip(df['C_t'], df['Phi_t']):
         if c > p:
@@ -105,9 +106,12 @@ else:
             fases.append('Reconfiguración' if lang == "es" else "Reconfiguration")
     df['fase'] = fases
 
+    # -------------------------
+    # 📊 Gráfico
+    # -------------------------
     st.subheader(t["plot_title"][lang])
     fig, ax = plt.subplots()
-    ax.plot(df.index + 1, df['C_t'], label='C_t')
+    ax.plot(df.index + 1, df['C_t'], label='C_t (normalizado)')
     ax.plot(df.index + 1, df['C_t_local'], label='C_t_local')
     ax.plot(df.index + 1, df['C_t_Im'], label='C_t_Im')
     ax.plot(df.index + 1, df['Phi_t'], label='Phi_t', linestyle='--')
@@ -122,33 +126,38 @@ else:
     ax.legend()
     st.pyplot(fig)
 
+    # -------------------------
+    # 📋 Reporte
+    # -------------------------
     st.subheader(t["report_title"][lang])
     participantes = df['participante'].unique().tolist() if 'participante' in df.columns else []
     coherencia_total = float(df['C_t'].sum())
+    porcentaje_supera = (df['C_t'] > df['Phi_t']).mean() * 100
     texto = (
         f"Participantes: {', '.join(participantes) if participantes else '—'}\n"
         f"Promedio C_t: {df['C_t'].mean():.3f}\n"
         f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
-        f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+        f"Turnos con C_t > Phi_t: {porcentaje_supera:.1f}%\n"
     )
+
+    if porcentaje_supera > 90:
+        texto += ("⚠️ Advertencia: el umbral Φₜ podría estar demasiado bajo o los turnos son muy coherentes.\n" 
+                  if lang == 'es' else "⚠️ Warning: Φₜ threshold may be too low or turns are highly coherent.\n")
+
     st.markdown(f"```\n{texto}\n```")
 
-    st.download_button(
-        t["download_txt"][lang],
-        data=texto,
-        file_name=("reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt"),
-        mime="text/plain"
-    )
+    # -------------------------
+    # 📄 Descargas
+    # -------------------------
+    st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt", mime="text/plain")
+    st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv", mime="text/csv")
 
-    st.download_button(
-        t["download_csv"][lang],
-        data=df.to_csv(index=False),
-        file_name=("datos_TIE_Dialog.csv" if lang == "es" else "TIE_Dialog_data.csv"),
-        mime="text/csv"
-    )
-
+    # -------------------------
+    # Vista previa final
+    # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
