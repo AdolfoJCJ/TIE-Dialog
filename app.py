@@ -1,4 +1,5 @@
-# TIE-Dialog multilingüe completo con selector de idioma, reporte y descarga CSV/TXT con mejoras sugeridas
+# TIE-Dialog multilingüe completo con embeddings para coherencia informacional
+from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -19,12 +20,12 @@ t = {
         "en": "🧰 TIE–Dialog: Coherence, Threshold and Phases"
     },
     "upload": {
-        "es": "📂 Carga un archivo .csv con al menos 'coherencia' (o deja vacío para cálculo automático)",
-        "en": "📂 Upload a .csv file with at least 'coherencia' column (or leave empty for auto-calculation)"
+        "es": "📂 Carga un archivo .csv con columnas 'texto' y 'participante' (o deja vacío para prueba)",
+        "en": "📂 Upload a .csv file with 'texto' and 'participante' columns (or leave empty to test)"
     },
     "error": {
-        "es": "El archivo debe incluir una columna llamada 'coherencia'.",
-        "en": "The file must include a column named 'coherencia'."
+        "es": "El archivo debe incluir una columna llamada 'texto'.",
+        "en": "The file must include a column named 'texto'."
     },
     "plot_title": {
         "es": "🔢 Evolución de C_t, C_t_local, C_t_Im y Phi_t",
@@ -65,46 +66,31 @@ uploaded_file = st.file_uploader(t["upload"][lang], type="csv")
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
-    # Simulación de coherencia automática si no hay archivo cargado
     df = pd.DataFrame({
         'turno': range(1, 21),
         'participante': ['Alice', 'Bob', 'Carla', 'Bob', 'Alice', 'Carla', 'Bob', 'Alice', 'Carla', 'Bob',
                          'Alice', 'Carla', 'Bob', 'Alice', 'Carla', 'Bob', 'Alice', 'Carla', 'Bob', 'Alice'],
-        'texto': [f"Mensaje {i}" for i in range(1, 21)],
-        'coherencia': [0.62, 0.68, 0.75, 0.73, 0.77, 0.80, 0.65, 0.60, 0.70, 0.72,
-                       0.66, 0.71, 0.74, 0.78, 0.82, 0.85, 0.88, 0.87, 0.69, 0.65]
+        'texto': [f"Mensaje de prueba {i}" for i in range(1, 21)]
     })
 
-if 'coherencia' not in df.columns:
+# -------------------------
+# 🔎 Cálculo de coherencia con embeddings
+# -------------------------
+if 'texto' not in df.columns:
     st.error(t["error"][lang])
-else:
-    # Crear columnas base
-    df['C_t'] = df['coherencia'].astype(float)
-    df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
-    df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
+    st.stop()
 
-    # Calcular Phi_t
-    phi_0, alpha, beta = 0.75, 0.3, 0.2
-    phi_vals = []
-    for i in range(len(df)):
-        if i < 5:
-            phi_vals.append(phi_0)
-        else:
-            w = df['C_t'][i-5:i]
-            phi_t = phi_0 + alpha * w.std() - beta * w.mean()
-            phi_vals.append(max(0, min(1, float(phi_t))))
-    df['Phi_t'] = phi_vals
+with st.spinner("Calculando coherencia informacional..."):
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    textos = df['texto'].astype(str).tolist()
+    embeddings = model.encode(textos, convert_to_tensor=True)
+    coherencias = []
+    for i in range(len(embeddings) - 1):
+        sim = util.pytorch_cos_sim(embeddings[i], embeddings[i + 1]).item()
+        coherencias.append(sim)
+    coherencias.append(coherencias[-1])
+    df['coherencia'] = coherencias
 
-    # Etiquetado de fases
-    fases = []
-    for c, p in zip(df['C_t'], df['Phi_t']):
-        if c > p:
-            fases.append('Alta coherencia' if lang == "es" else "High coherence")
-        elif c < p - 0.1:
-            fases.append('Incoherencia' if lang == "es" else "Incoherence")
-        else:
-            fases.append('Reconfiguración' if lang == "es" else "Reconfiguration")
-    df['fase'] = fases
 
     # -------------------------
     # 🌈 Gráfica con marcadores
