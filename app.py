@@ -1,4 +1,4 @@
-# TIE-Dialog multilingüe completo con embeddings, métricas, reporte y exportación (con normalización y umbral ajustado)
+# TIE-Dialog multilingüe completo con embeddings, sin normalización, y umbral ajustado a coseno real
 from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
@@ -76,7 +76,7 @@ else:
     })
 
 # -------------------------
-# 🔎 Cálculo de coherencia con embeddings
+# 🔎 Cálculo de coherencia con embeddings (sin normalización)
 # -------------------------
 if 'texto' not in df.columns:
     st.error(t["error"][lang])
@@ -89,7 +89,6 @@ with st.spinner("Calculando coherencia informacional..."):
     coherencias = []
     for i in range(len(embeddings) - 1):
         sim = util.pytorch_cos_sim(embeddings[i], embeddings[i + 1]).item()
-        sim = (sim + 1) / 2  # Normaliza a rango [0, 1]
         coherencias.append(sim)
     coherencias.append(coherencias[-1])
     df['coherencia'] = coherencias
@@ -101,7 +100,7 @@ df['C_t'] = df['coherencia'].astype(float)
 df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
 df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
-phi_0, alpha, beta = 0.75, 0.3, 0.15
+phi_0, alpha, beta = 0.3, 0.4, 0.3
 phi_vals = []
 for i in range(len(df)):
     if i < 3:
@@ -109,7 +108,7 @@ for i in range(len(df)):
     else:
         w = df['C_t'][i-3:i]
         phi_t = phi_0 + alpha * w.std() - beta * w.mean()
-        phi_vals.append(max(0, min(1, float(phi_t))))
+        phi_vals.append(max(-1, min(1, float(phi_t))))
 df['Phi_t'] = phi_vals
 
 fases = []
@@ -122,66 +121,6 @@ for c, p in zip(df['C_t'], df['Phi_t']):
         fases.append('Reconfiguración' if lang == "es" else "Reconfiguration")
 df['fase'] = fases
 
-# -------------------------
-# 📊 Gráfico
-# -------------------------
-st.subheader(t["plot_title"][lang])
-fig, ax = plt.subplots()
-ax.plot(df.index + 1, df['C_t'], label='C_t')
-ax.plot(df.index + 1, df['C_t_local'], label='C_t_local')
-ax.plot(df.index + 1, df['C_t_Im'], label='C_t_Im')
-ax.plot(df.index + 1, df['Phi_t'], label='Phi_t', linestyle='--')
-ax.legend()
-st.pyplot(fig)
-
-# -------------------------
-# 📋 Reporte
-# -------------------------
-st.subheader(t["report_title"][lang])
-participantes = df['participante'].unique().tolist() if 'participante' in df.columns else []
-coherencia_total = float(df['C_t'].sum())
-if 'participante' in df.columns:
-    ranking_df = df.groupby('participante').agg(
-        C_t_sum=('C_t', 'sum'),
-        turnos=('C_t', 'count'),
-        C_t_mean=('C_t', 'mean')
-    ).sort_values('C_t_sum', ascending=False).reset_index()
-    ranking_df['share_pct'] = (ranking_df['C_t_sum'] / coherencia_total * 100.0).round(2)
-else:
-    ranking_df = pd.DataFrame(columns=['participante', 'C_t_sum', 'turnos', 'C_t_mean', 'share_pct'])
-
-rupturas = df.index[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')].tolist()
-rupturas = [int(i+1) for i in rupturas]
-emergencias = df.index[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')].tolist()
-emergencias = [int(i+1) for i in emergencias]
-estabilidad = 1 / (df['C_t'].std() + 1e-6)
-
-texto = (
-    f"Participantes: {', '.join(participantes) if participantes else '—'}\n"
-    f"Promedio C_t: {df['C_t'].mean():.3f}\n"
-    f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
-    f"Coherencia total (suma C_t): {coherencia_total:.3f}\n"
-    f"Índice de estabilidad: {estabilidad:.3f}\n"
-    f"Rupturas detectadas: {rupturas}\n"
-    f"Turnos de alta coherencia: {emergencias}\n"
-)
-
-# Mostrar texto
-st.markdown(f"```\n{texto}\n```")
-
-# -------------------------
-# 📄 Descargas
-# -------------------------
-st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt", mime="text/plain")
-st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv", mime="text/csv")
-
-# -------------------------
-# Vista previa final
-# -------------------------
-st.subheader(t["preview"][lang])
-st.dataframe(df)
-if not ranking_df.empty:
-    st.dataframe(ranking_df)
 
 
 
