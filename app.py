@@ -101,7 +101,7 @@ df['C_t'] = df['coherencia'].astype(float)
 df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
 df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
-phi_0, alpha, beta = 0.65, 0.3, 0.1
+phi_0, alpha, beta = 0.75, 0.3, 0.15
 phi_vals = []
 for i in range(len(df)):
     if i < 3:
