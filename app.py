@@ -1,4 +1,4 @@
-# TIE-Dialog multilingüe completo con embeddings, métricas, reporte y exportación
+# TIE-Dialog multilingüe completo con embeddings, métricas, reporte y exportación (con normalización y umbral ajustado)
 from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
@@ -62,16 +62,16 @@ else:
         'turno': range(1, 11),
         'participante': ['Ana', 'Luis', 'Ana', 'Luis', 'Ana', 'Luis', 'Ana', 'Luis', 'Ana', 'Luis'],
         'texto': [
-            "Hola, ¿cómo estás hoy?",
-            "Bien, gracias. ¿Y tú?",
-            "Me alegra escuchar eso. Estoy bien también.",
-            "¿Has leído sobre la teoría de la emergencia informacional?",
-            "Sí, es fascinante cómo plantea que la consciencia surge de la coherencia.",
-            "Exacto, y cómo se relaciona con configuraciones internas y externas.",
-            "¿Crees que podríamos medir esa coherencia en conversaciones humanas?",
-            "Posiblemente, si usamos métricas como similitud semántica entre turnos.",
-            "Eso sería revolucionario para entender el pensamiento en tiempo real.",
-            "Sí, podría cambiar la forma en que definimos inteligencia y diálogo."
+            "¿Has leído la teoría de la emergencia informacional?",
+            "Sí, dice que la consciencia emerge del acoplamiento informacional.",
+            "Exacto, y que la coherencia es clave para que surja la perspectiva.",
+            "También mencionan I_s e I_m como componentes del sistema.",
+            "Eso permite medir cómo evoluciona la coherencia en el tiempo.",
+            "Y nos ayuda a detectar cuándo un sistema cruza el umbral Phi_t.",
+            "Así podemos diseñar interfaces que mantengan el sentido estable.",
+            "Incluso podríamos usarlo en IA para alinear sistemas con el contexto.",
+            "Sí, representando el espacio de qualia como topología coherente.",
+            "Ese enfoque puede cambiar por completo nuestra comprensión de la mente."
         ]
     })
 
@@ -89,6 +89,7 @@ with st.spinner("Calculando coherencia informacional..."):
     coherencias = []
     for i in range(len(embeddings) - 1):
         sim = util.pytorch_cos_sim(embeddings[i], embeddings[i + 1]).item()
+        sim = (sim + 1) / 2  # Normaliza a rango [0, 1]
         coherencias.append(sim)
     coherencias.append(coherencias[-1])
     df['coherencia'] = coherencias
@@ -97,10 +98,10 @@ with st.spinner("Calculando coherencia informacional..."):
 # 🔢 Cálculo de métricas completas
 # -------------------------
 df['C_t'] = df['coherencia'].astype(float)
-df['C_t_local'] = df['C_t'].rolling(3, min_periods=1).mean()
-df['C_t_Im'] = df['C_t'].ewm(span=4, adjust=False).mean()
+df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
+df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
-phi_0, alpha, beta = 0.75, 0.3, 0.2
+phi_0, alpha, beta = 0.65, 0.3, 0.1
 phi_vals = []
 for i in range(len(df)):
     if i < 3:
@@ -181,6 +182,7 @@ st.subheader(t["preview"][lang])
 st.dataframe(df)
 if not ranking_df.empty:
     st.dataframe(ranking_df)
+
 
 
 
