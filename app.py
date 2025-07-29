@@ -12,17 +12,6 @@ language = st.sidebar.selectbox("Choose language / Elegir idioma", options=["Eng
 lang = "es" if language == "Español" else "en"
 
 # -------------------------
-# ⚙️ Controles avanzados (sidebar)
-# -------------------------
-st.sidebar.markdown("### ⚙️ Parámetros")
-win = st.sidebar.slider("Ventana media/std", 3, 10, 5, 1)
-alpha = st.sidebar.slider("α (peso media móvil)", 0.1, 1.0, 0.6, 0.05)
-beta  = st.sidebar.slider("β (peso std móvil)",   0.1, 2.0, 0.8, 0.05)
-gamma = st.sidebar.slider("γ (penalización exponencial)", 0.0, 2.0, 0.5, 0.05)
-delta_thr = st.sidebar.slider("Δ ruptura (caída en C_t)", 0.05, 0.8, 0.30, 0.01)
-rupt_margin = st.sidebar.slider("Margen extra en Φₜ tras ruptura", 0.05, 0.5, 0.20, 0.01)
-
-# -------------------------
 # 📊 Diccionario de textos
 # -------------------------
 t = {
@@ -39,8 +28,8 @@ t = {
         "en": "The file must include a column named 'texto'."
     },
     "plot_title": {
-        "es": "🔢 Evolución de C_t y Φ_t (con rupturas)",
-        "en": "🔢 Evolution of C_t and Φ_t (with breaks)"
+        "es": "🔢 Evolución de C_t y Φ_t (umbral)",
+        "en": "🔢 Evolution of C_t and Φ_t (threshold)"
     },
     "report_title": {
         "es": "🔍 Reporte automático",
@@ -86,60 +75,44 @@ if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
     # -------------------------
-    # 🔹 Calcular embeddings (modelo más sensible)
+    # 🔹 Calcular embeddings (modelo sensible)
     # -------------------------
-    try:
-        model = SentenceTransformer('all-mpnet-base-v2')
-    except Exception:
-        # Fallback por si no está descargado
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-
+    model = SentenceTransformer('all-mpnet-base-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Similaridad coseno consecutiva
+    # Calcular similaridades
     similarities = [1.0]
     for i in range(1, len(embs)):
-        sim = util.cos_sim(embs[i], embs[i-1]).item()
-        similarities.append(float(sim))
+        sim = util.cos_sim(embs[i], embs[i - 1]).item()
+        similarities.append(sim)
     df['similarity'] = similarities
 
-    # -------------------------
-    # 🔹 Normalizar C_t de forma robusta
-    #    - Usamos cuantiles para evitar que un outlier eleve todo.
-    # -------------------------
-    sims_series = pd.Series(similarities[1:]) if len(similarities) > 1 else pd.Series([1.0])
-    q05, q95 = sims_series.quantile(0.05), sims_series.quantile(0.95)
-    min_sim = float(q05)
-    max_sim = float(q95) if q95 > q05 else float(sims_series.max())
-    rng = (max_sim - min_sim) if (max_sim > min_sim) else 1.0
-
+    # Normalización robusta
+    min_sim = min(similarities[1:])
+    max_sim = max(similarities[1:])
+    rng = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
     # -------------------------
-    # 🔹 Umbral Φ_t (dinámico + penalización no lineal)
+    # 🔹 Definir Phi_t como umbral base + detección de caída
     # -------------------------
-    rolling_mean = df['C_t'].rolling(window=win, min_periods=1).mean()
-    rolling_std  = df['C_t'].rolling(window=win, min_periods=1).std().fillna(0.0)
+    base_phi = 0.75
+    df['Phi_t'] = base_phi
 
-    penalizacion = np.exp(-gamma * rolling_std)  # más std => menos penalización
-    phi_base = (alpha * rolling_mean - beta * rolling_std * penalizacion).clip(0.0, 1.0)
-
-    # -------------------------
-    # 🔹 Detección de rupturas por caída en C_t
-    #     - Si ΔC_t < -delta_thr => ruptura
-    #     - Forzamos Φ_t >= C_t + rupt_margin en esos puntos
-    # -------------------------
-    rupt_flag = [0]
+    # Detectar rupturas por caída brusca en similaridad
+    sim_deltas = [0.0]
     for i in range(1, len(df)):
-        delta = df.loc[i, 'C_t'] - df.loc[i-1, 'C_t']
-        rupt_flag.append(1 if delta < -delta_thr else 0)
-    df['ruptura'] = rupt_flag
+        delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
+        sim_deltas.append(delta)
+    df['delta_sim'] = sim_deltas
 
-    phi_adj = phi_base.copy()
-    idx_rupt = df.index[df['ruptura'] == 1]
-    if len(idx_rupt) > 0:
-        phi_adj.loc[idx_rupt] = np.maximum(phi_adj.loc[idx_rupt], df.loc[idx_rupt, 'C_t'] + rupt_margin)
-    df['Phi_t'] = phi_adj.clip(0.0, 1.0)
+    # Ruptura: caída mayor a 0.2
+    ruptura_mask = df['delta_sim'] < -0.2
+    df['ruptura'] = ruptura_mask.astype(int)
+
+    # Elevar Phi_t en rupturas
+    df.loc[ruptura_mask, 'Phi_t'] = df['C_t'] + 0.2
+    df['Phi_t'] = df['Phi_t'].clip(0.0, 1.0)
 
     # -------------------------
     # 🔹 Clasificación de fases
@@ -160,12 +133,13 @@ else:
     st.subheader(t["plot_title"][lang])
     fig, ax = plt.subplots()
     ax.plot(df.index + 1, df['C_t'], label='C_t (normalizado)')
-    ax.plot(df.index + 1, df['Phi_t'], label='Phi_t (umbral dinámico)', linestyle='--')
-    # Marcas de ruptura
-    if df['ruptura'].sum() > 0:
-        ax.scatter(df.index[df['ruptura'] == 1] + 1,
-                   df.loc[df['ruptura'] == 1, 'C_t'],
-                   label='Ruptura (ΔC_t)', marker='x')
+    ax.plot(df.index + 1, df['Phi_t'], label='Phi_t (umbral)', linestyle='--')
+    ax.scatter(df[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')].index + 1,
+               df[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')]['C_t'],
+               color='red', label='Incoherencia', marker='x')
+    ax.scatter(df[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')].index + 1,
+               df[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')]['C_t'],
+               color='green', label='Emergencia', marker='o')
     ax.set_xlabel('Turno' if lang == 'es' else 'Turn')
     ax.set_ylabel('Valor' if lang == 'es' else 'Value')
     ax.legend()
@@ -185,29 +159,23 @@ else:
         f"Promedio C_t: {df['C_t'].mean():.3f}\n"
         f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
         f"Turnos con C_t > Phi_t: {porcentaje_supera:.1f}%\n"
-        f"Rupturas detectadas (ΔC_t < -{delta_thr:.2f}): {num_rupturas}\n"
+        f"Rupturas detectadas: {num_rupturas}\n"
         f"Fases: {conteo_fases}\n"
-        f"Parámetros: ventana={win}, α={alpha:.2f}, β={beta:.2f}, γ={gamma:.2f}, Δ={delta_thr:.2f}, margen={rupt_margin:.2f}\n"
     )
-    if porcentaje_supera > 90:
-        texto += ("⚠️ Advertencia: la mayoría de los turnos supera Φₜ. Revisa parámetros o dataset.\n"
-                  if lang == 'es' else "⚠️ Warning: most turns exceed Φₜ. Review parameters or dataset.\n")
-
     st.markdown(f"```\n{texto}\n```")
 
     # -------------------------
     # 📄 Descargas
     # -------------------------
-    st.download_button(t["download_txt"][lang], data=texto,
-                       file_name="reporte_TIE_Dialog.txt", mime="text/plain")
-    st.download_button(t["download_csv"][lang], data=df.to_csv(index=False),
-                       file_name="datos_TIE_Dialog.csv", mime="text/csv")
+    st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt", mime="text/plain")
+    st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv", mime="text/csv")
 
     # -------------------------
     # Vista previa final
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
