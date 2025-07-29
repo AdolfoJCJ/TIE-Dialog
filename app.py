@@ -1,119 +1,109 @@
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-from sentence_transformers import SentenceTransformer, util
 from io import StringIO
 
-# 🌍 Configuración e idioma
-st.set_page_config(page_title="TIE–Dialog", layout="wide")
-idioma = st.selectbox("Idioma / Language", ["Español", "English"])
-
-textos = {
-    "Español": {
-        "titulo": "🧠 TIE–Dialog — Análisis de coherencia informacional",
-        "sube": "Sube un archivo `.csv` con columnas: `speaker`, `timestamp`, `text`",
-        "cargar": "Subir diálogo",
-        "vista_previa": "Vista previa:",
-        "graf1": "📈 Coherencia local y con Im",
-        "graf2": "👥 Evolución por hablante (coherencia con Im)",
-        "rupturas": "🧨 Rupturas informacionales detectadas:",
-        "descargar": "Descargar resultados como CSV",
-        "boton_descarga": "⬇️ Descargar CSV"
-    },
-    "English": {
-        "titulo": "🧠 TIE–Dialog — Informational Coherence Analysis",
-        "sube": "Upload a `.csv` file with columns: `speaker`, `timestamp`, `text`",
-        "cargar": "Upload dialogue",
-        "vista_previa": "Preview:",
-        "graf1": "📈 Local coherence and Im coherence",
-        "graf2": "👥 Individual evolution (coherence with Im)",
-        "rupturas": "🧨 Detected informational ruptures:",
-        "descargar": "Download results as CSV",
-        "boton_descarga": "⬇️ Download CSV"
-    }
-}
-t = textos[idioma]
-
-# 🧠 Cargar modelo de embeddings
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# 📥 Cargar archivo
-st.title(t["titulo"])
-st.markdown(t["sube"])
-archivo = st.file_uploader(t["cargar"], type=["csv", "txt"])
-
-if archivo is not None:
-    if archivo.type == "text/csv":
-        df = pd.read_csv(archivo)
-    else:
-        contenido = archivo.read().decode("utf-8")
-        df = pd.read_csv(StringIO(contenido))
-
-    st.subheader(t["vista_previa"])
-    st.dataframe(df.head())
-
-    # 🔁 Embeddings y coherencia
-    textos = df["text"].astype(str).tolist()
-    embeddings = model.encode(textos, convert_to_tensor=True)
-
-    # Coherencia local
-    coherencia_local = [None]
-    for i in range(1, len(embeddings)):
-        sim = util.cos_sim(embeddings[i], embeddings[i - 1]).item()
-        coherencia_local.append(sim)
-    df["coherencia_local"] = coherencia_local
-
-    # Coherencia con Im
-    coherencia_Im = [None]
-    for i in range(1, len(embeddings)):
-        Im_t = sum(embeddings[:i]) / len(embeddings[:i])
-        coherence = util.cos_sim(embeddings[i], Im_t).item()
-        coherencia_Im.append(coherence)
-    df["coherencia_Im"] = coherencia_Im
-
-    # 📈 Gráfico 1
-    st.subheader(t["graf1"])
-    plt.figure(figsize=(10, 5))
-    plt.plot(range(len(coherencia_local)), coherencia_local, marker='x', label="Coherencia local")
-    plt.plot(range(len(coherencia_Im)), coherencia_Im, marker='o', label="Coherencia con Im")
-    plt.ylim(0, 1)
-    plt.grid(True)
-    plt.legend()
-    st.pyplot(plt.gcf())
-
-    # 👥 Tracker por hablante
-    st.subheader(t["graf2"])
-    plt.figure(figsize=(10, 5))
-    for speaker in df["speaker"].unique():
-        datos = df[df["speaker"] == speaker]
-        plt.plot(datos.index, datos["coherencia_Im"], marker='o', label=f"{speaker}")
-    plt.ylim(0, 1)
-    plt.grid(True)
-    plt.legend()
-    st.pyplot(plt.gcf())
-
-    # 🧨 Rupturas
-    rupturas = [None]
-    for i in range(1, len(df)):
-        media_anterior = df["coherencia_Im"][:i].mean()
-        actual = df["coherencia_Im"][i]
-        if actual < 0.75 * media_anterior:
-            rupturas.append(True)
+# ---------- 1. Función para calcular el umbral dinámico ----------
+def calcular_phi_dinamico(df, window_size=5, phi_0=0.75, alpha=0.3, beta=0.2):
+    phi_dinamico = []
+    for i in range(len(df)):
+        if i < window_size:
+            phi_dinamico.append(phi_0)
         else:
-            rupturas.append(False)
-    df["ruptura"] = rupturas
+            ventana = df['coherencia'][i-window_size:i]
+            std_c = ventana.std()
+            mean_c = ventana.mean()
+            phi_t = phi_0 + alpha * std_c - beta * mean_c
+            phi_dinamico.append(max(0, min(1, phi_t)))
+    df['phi_dinamico'] = phi_dinamico
+    return df
 
-    st.subheader(t["rupturas"])
-    rupt_df = df[df["ruptura"] == True][["speaker", "text", "coherencia_Im"]]
-    if not rupt_df.empty:
-        st.dataframe(rupt_df)
+# ---------- 2. Función para generar el reporte automático ----------
+def generar_reporte(df):
+    coherencia = df['coherencia']
+    phi = df['phi_dinamico']
+    n = len(df)
+
+    media_c = coherencia.mean()
+    media_phi = phi.mean()
+    porcentaje_superado = (coherencia > phi).sum() / n * 100
+
+    cruce_indices = (coherencia > phi).astype(int).diff().fillna(0)
+    primer_cruce = cruce_indices[cruce_indices == 1].index.min()
+    pico_max = coherencia.idxmax()
+    desfase_max = (phi - coherencia).idxmax()
+
+    fases = []
+    fase_actual = None
+    for i in range(n):
+        if coherencia[i] > phi[i]:
+            if fase_actual != 'Alta coherencia':
+                fases.append((i, 'Alta coherencia'))
+                fase_actual = 'Alta coherencia'
+        elif coherencia[i] < phi[i] - 0.1:
+            if fase_actual != 'Incoherencia':
+                fases.append((i, 'Incoherencia'))
+                fase_actual = 'Incoherencia'
+        else:
+            if fase_actual != 'Reconfiguración':
+                fases.append((i, 'Reconfiguración'))
+                fase_actual = 'Reconfiguración'
+
+    texto = f"""🔎 REPORTE AUTOMÁTICO DE COHERENCIA INFORMACIONAL
+
+• Coherencia promedio: {media_c:.3f}
+• Umbral dinámico promedio: {media_phi:.3f}
+• Porcentaje de turnos con coherencia > umbral: {porcentaje_superado:.2f}%
+
+⏱️ Momentos clave:
+• Primer cruce del umbral: Turno {primer_cruce if pd.notna(primer_cruce) else 'No detectado'}
+• Máximo de coherencia: Turno {pico_max} (𝒞 = {coherencia[pico_max]:.3f})
+• Mayor desfase negativo: Turno {desfase_max} (𝒞 = {coherencia[desfase_max]:.3f}, Φ = {phi[desfase_max]:.3f})
+
+🌀 Fases detectadas:
+"""
+    for idx, fase in fases:
+        texto += f"• Turno {idx}: {fase}\n"
+
+    return texto
+
+# ---------- 3. Interfaz Streamlit ----------
+st.title("TIE–Dialog: Coherencia y Umbral Dinámico")
+
+# Cargar CSV
+uploaded_file = st.file_uploader("Carga un archivo .csv con columna 'coherencia'", type="csv")
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    if 'coherencia' not in df.columns:
+        st.error("❌ El archivo debe tener una columna llamada 'coherencia'.")
     else:
-        st.write("—")
+        # Calcular umbral dinámico
+        df = calcular_phi_dinamico(df)
 
-    # ⬇️ Exportar resultados
-    st.subheader(t["descargar"])
-    if st.button(t["boton_descarga"]):
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(t["boton_descarga"], csv, "resultados_tie_dialog.csv", "text/csv")
+        # Gráfico
+        st.subheader("Evolución de la coherencia y del umbral dinámico")
+        fig, ax = plt.subplots()
+        ax.plot(df['coherencia'], label='𝒞(t)')
+        ax.plot(df['phi_dinamico'], label='Φ(t)', linestyle='--')
+        ax.set_xlabel("Turno")
+        ax.set_ylabel("Valor")
+        ax.set_title("Coherencia y Umbral Dinámico")
+        ax.legend()
+        st.pyplot(fig)
+
+        # Reporte
+        st.subheader("Reporte automático")
+        reporte_texto = generar_reporte(df)
+        st.markdown(f"```\n{reporte_texto}\n```")
+
+        # Botón de descarga
+        buffer = StringIO()
+        buffer.write(reporte_texto)
+        buffer.seek(0)
+        st.download_button(
+            label="📥 Descargar reporte como .txt",
+            data=buffer,
+            file_name="reporte_coherencia_TIE_Dialog.txt",
+            mime="text/plain"
+        )
+
