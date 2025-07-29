@@ -42,9 +42,17 @@ t = {
         "es": "📄 Descargar datos enriquecidos (.csv)",
         "en": "📄 Download enriched data (.csv)"
     },
+    "download_rank": {
+        "es": "🏅 Descargar ranking por participante (.csv)",
+        "en": "🏅 Download per-participant ranking (.csv)"
+    },
     "preview": {
         "es": "🔍 Vista previa de resultados:",
         "en": "🔍 Results preview:"
+    },
+    "ranking_title": {
+        "es": "🏆 Ranking de coherencia por participante",
+        "en": "🏆 Coherence contribution ranking"
     }
 }
 
@@ -60,7 +68,7 @@ if uploaded_file:
         st.error(t["error"][lang])
     else:
         # Crear columnas base
-        df['C_t'] = df['coherencia']
+        df['C_t'] = df['coherencia'].astype(float)
         df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
         df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
@@ -73,7 +81,7 @@ if uploaded_file:
             else:
                 w = df['C_t'][i-5:i]
                 phi_t = phi_0 + alpha * w.std() - beta * w.mean()
-                phi_vals.append(max(0, min(1, phi_t)))
+                phi_vals.append(max(0, min(1, float(phi_t))))
         df['Phi_t'] = phi_vals
 
         # Etiquetado de fases
@@ -92,10 +100,12 @@ if uploaded_file:
         # -------------------------
         st.subheader(t["plot_title"][lang])
         fig, ax = plt.subplots()
-        ax.plot(df['C_t'], label='C_t')
-        ax.plot(df['C_t_local'], label='C_t_local')
-        ax.plot(df['C_t_Im'], label='C_t_Im')
-        ax.plot(df['Phi_t'], label='Phi_t', linestyle='--')
+        ax.plot(df.index + 1, df['C_t'], label='C_t')
+        ax.plot(df.index + 1, df['C_t_local'], label='C_t_local')
+        ax.plot(df.index + 1, df['C_t_Im'], label='C_t_Im')
+        ax.plot(df.index + 1, df['Phi_t'], label='Phi_t', linestyle='--')
+        ax.set_xlabel('Turno' if lang == 'es' else 'Turn')
+        ax.set_ylabel('Valor' if lang == 'es' else 'Value')
         ax.legend()
         st.pyplot(fig)
 
@@ -106,21 +116,68 @@ if uploaded_file:
         if 'turno' not in df.columns:
             df['turno'] = range(1, len(df) + 1)
 
-        texto = (
-            f"TIE–Dialog Report ({'Español' if lang == 'es' else 'English'})\n\n"
-            f"Promedio C_t: {df['C_t'].mean():.3f}\n"
-            f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
-            f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
-            f"Fases encontradas:\n"
-        )
+        # Estadísticas adicionales
+        participantes = df['participante'].unique().tolist() if 'participante' in df.columns else []
+        coherencia_total = float(df['C_t'].sum())
+        if 'participante' in df.columns:
+            ranking_df = df.groupby('participante').agg(
+                C_t_sum=('C_t', 'sum'),
+                turnos=('C_t', 'count'),
+                C_t_mean=('C_t', 'mean')
+            ).sort_values('C_t_sum', ascending=False).reset_index()
+            ranking_df['share_pct'] = (ranking_df['C_t_sum'] / coherencia_total * 100.0).round(2)
+        else:
+            ranking_df = pd.DataFrame(columns=['participante', 'C_t_sum', 'turnos', 'C_t_mean', 'share_pct'])
 
+        # Rupturas = turnos marcados como Incoherencia
+        rupturas = df.index[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')].tolist()
+        rupturas = [int(i+1) for i in rupturas]
+        # Perspectiva emergente = turnos de Alta coherencia
+        emergencias = df.index[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')].tolist()
+        emergencias = [int(i+1) for i in emergencias]
+
+        # Texto del reporte
+        if lang == 'es':
+            texto = (
+                "TIE–Dialog Report (Español)\n\n"
+                f"Participantes: {', '.join(participantes) if participantes else '—'}\n"
+                f"Promedio C_t: {df['C_t'].mean():.3f}\n"
+                f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
+                f"Coherencia total (suma C_t): {coherencia_total:.3f}\n"
+                f"Turnos con C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+                f"Rupturas detectadas (Incoherencia): {rupturas}\n"
+                f"Turnos de perspectiva emergente (Alta coherencia): {emergencias}\n\n"
+                "Ranking de coherencia aportada:\n"
+            )
+        else:
+            texto = (
+                "TIE–Dialog Report (English)\n\n"
+                f"Participants: {', '.join(participantes) if participantes else '—'}\n"
+                f"Average C_t: {df['C_t'].mean():.3f}\n"
+                f"Average Phi_t: {df['Phi_t'].mean():.3f}\n"
+                f"Total coherence (sum C_t): {coherencia_total:.3f}\n"
+                f"Turns with C_t > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\n"
+                f"Detected ruptures (Incoherence): {rupturas}\n"
+                f"Emergent perspective turns (High coherence): {emergencias}\n\n"
+                "Coherence contribution ranking:\n"
+            )
+
+        # Añadir ranking al texto
+        if not ranking_df.empty:
+            for i, row in enumerate(ranking_df.itertuples(index=False), start=1):
+                texto += (f"{i}. {row.participante}: suma={row.C_t_sum:.3f}, media={row.C_t_mean:.3f}, turnos={row.turnos}, {row.share_pct:.2f}%\n")
+        else:
+            texto += "—\n"
+
+        # Fases compactadas
         cambios = df['fase'].ne(df['fase'].shift()).cumsum()
         resumen = df.groupby(cambios, as_index=False).first()
         resumen = resumen.sort_values(by='turno')
-
+        texto += "\n" + ("Fases encontradas:" if lang == 'es' else "Detected phases:") + "\n"
         for _, row in resumen.iterrows():
-            texto += f"Turno {int(row['turno'])}: {row['fase']}\n" if lang == "es" else f"Turn {int(row['turno'])}: {row['fase']}\n"
+            texto += (f"Turno {int(row['turno'])}: {row['fase']}\n" if lang == 'es' else f"Turn {int(row['turno'])}: {row['fase']}\n")
 
+        # Mostrar reporte
         st.markdown(f"```\n{texto}\n```")
 
         # -------------------------
@@ -129,22 +186,38 @@ if uploaded_file:
         st.download_button(
             t["download_txt"][lang],
             data=texto,
-            file_name="reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt",
+            file_name=("reporte_TIE_Dialog.txt" if lang == "es" else "report_TIE_Dialog.txt"),
             mime="text/plain"
         )
 
         st.download_button(
             t["download_csv"][lang],
             data=df.to_csv(index=False),
-            file_name="datos_TIE_Dialog.csv" if lang == "es" else "TIE_Dialog_data.csv",
+            file_name=("datos_TIE_Dialog.csv" if lang == "es" else "TIE_Dialog_data.csv"),
             mime="text/csv"
         )
+
+        if not ranking_df.empty:
+            st.download_button(
+                t["download_rank"][lang],
+                data=ranking_df.to_csv(index=False),
+                file_name=("ranking_participantes.csv" if lang == "es" else "participants_ranking.csv"),
+                mime="text/csv"
+            )
+
+        # -------------------------
+        # 🏆 Tabla de ranking
+        # -------------------------
+        if not ranking_df.empty:
+            st.subheader(t["ranking_title"][lang])
+            st.dataframe(ranking_df)
 
         # -------------------------
         # 🔍 Vista previa de resultados
         # -------------------------
         st.subheader(t["preview"][lang])
         st.dataframe(df.head())
+
 
 
 
