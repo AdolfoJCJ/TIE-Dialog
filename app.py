@@ -1,109 +1,127 @@
+# TIE-Dialog multilingüe con selector de idioma y secciones con emojis
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from io import StringIO
 
-# ---------- 1. Función para calcular el umbral dinámico ----------
-def calcular_phi_dinamico(df, window_size=5, phi_0=0.75, alpha=0.3, beta=0.2):
-    phi_dinamico = []
-    for i in range(len(df)):
-        if i < window_size:
-            phi_dinamico.append(phi_0)
-        else:
-            ventana = df['coherencia'][i-window_size:i]
-            std_c = ventana.std()
-            mean_c = ventana.mean()
-            phi_t = phi_0 + alpha * std_c - beta * mean_c
-            phi_dinamico.append(max(0, min(1, phi_t)))
-    df['phi_dinamico'] = phi_dinamico
-    return df
+# -------------------------
+# 🌐 Selector de idioma
+# -------------------------
+st.set_page_config(page_title="TIE–Dialog Multilingüe", layout="centered")
+language = st.sidebar.selectbox("Choose language / Elegir idioma", options=["English", "Español"], index=1)
+lang = "es" if language == "Español" else "en"
 
-# ---------- 2. Función para generar el reporte automático ----------
-def generar_reporte(df):
-    coherencia = df['coherencia']
-    phi = df['phi_dinamico']
-    n = len(df)
+# -------------------------
+# 📊 Diccionario de textos
+# -------------------------
+t = {
+    "title": {
+        "es": "🧰 TIE–Dialog: Coherencia, Umbral y Fases",
+        "en": "🧰 TIE–Dialog: Coherence, Threshold and Phases"
+    },
+    "upload": {
+        "es": "📂 Carga un archivo .csv con al menos 'coherencia'",
+        "en": "📂 Upload a .csv file with at least 'coherencia' column"
+    },
+    "error": {
+        "es": "El archivo debe incluir una columna llamada 'coherencia'.",
+        "en": "The file must include a column named 'coherencia'."
+    },
+    "plot_title": {
+        "es": "🔢 Evolución de C_t, C_t_local, C_t_Im y Phi_t",
+        "en": "🔢 Evolution of C_t, C_t_local, C_t_Im and Phi_t"
+    },
+    "report_title": {
+        "es": "🔍 Reporte automático",
+        "en": "🔍 Automatic report"
+    },
+    "download_txt": {
+        "es": "📄 Descargar reporte (.txt)",
+        "en": "📄 Download report (.txt)"
+    },
+    "download_csv": {
+        "es": "📄 Descargar datos enriquecidos (.csv)",
+        "en": "📄 Download enriched data (.csv)"
+    },
+    "preview": {
+        "es": "🔍 Vista previa de resultados:",
+        "en": "🔍 Results preview:"
+    }
+}
 
-    media_c = coherencia.mean()
-    media_phi = phi.mean()
-    porcentaje_superado = (coherencia > phi).sum() / n * 100
+# -------------------------
+# 📂 Carga CSV y procesamiento
+# -------------------------
+st.title(t["title"][lang])
+uploaded_file = st.file_uploader(t["upload"][lang], type="csv")
 
-    cruce_indices = (coherencia > phi).astype(int).diff().fillna(0)
-    primer_cruce = cruce_indices[cruce_indices == 1].index.min()
-    pico_max = coherencia.idxmax()
-    desfase_max = (phi - coherencia).idxmax()
-
-    fases = []
-    fase_actual = None
-    for i in range(n):
-        if coherencia[i] > phi[i]:
-            if fase_actual != 'Alta coherencia':
-                fases.append((i, 'Alta coherencia'))
-                fase_actual = 'Alta coherencia'
-        elif coherencia[i] < phi[i] - 0.1:
-            if fase_actual != 'Incoherencia':
-                fases.append((i, 'Incoherencia'))
-                fase_actual = 'Incoherencia'
-        else:
-            if fase_actual != 'Reconfiguración':
-                fases.append((i, 'Reconfiguración'))
-                fase_actual = 'Reconfiguración'
-
-    texto = f"""🔎 REPORTE AUTOMÁTICO DE COHERENCIA INFORMACIONAL
-
-• Coherencia promedio: {media_c:.3f}
-• Umbral dinámico promedio: {media_phi:.3f}
-• Porcentaje de turnos con coherencia > umbral: {porcentaje_superado:.2f}%
-
-⏱️ Momentos clave:
-• Primer cruce del umbral: Turno {primer_cruce if pd.notna(primer_cruce) else 'No detectado'}
-• Máximo de coherencia: Turno {pico_max} (𝒞 = {coherencia[pico_max]:.3f})
-• Mayor desfase negativo: Turno {desfase_max} (𝒞 = {coherencia[desfase_max]:.3f}, Φ = {phi[desfase_max]:.3f})
-
-🌀 Fases detectadas:
-"""
-    for idx, fase in fases:
-        texto += f"• Turno {idx}: {fase}\n"
-
-    return texto
-
-# ---------- 3. Interfaz Streamlit ----------
-st.title("TIE–Dialog: Coherencia y Umbral Dinámico")
-
-# Cargar CSV
-uploaded_file = st.file_uploader("Carga un archivo .csv con columna 'coherencia'", type="csv")
-if uploaded_file is not None:
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
     if 'coherencia' not in df.columns:
-        st.error("❌ El archivo debe tener una columna llamada 'coherencia'.")
+        st.error(t["error"][lang])
     else:
-        # Calcular umbral dinámico
-        df = calcular_phi_dinamico(df)
+        df['C_t'] = df['coherencia']
+        df['C_t_local'] = df['C_t'].rolling(5, min_periods=1).mean()
+        df['C_t_Im'] = df['C_t'].ewm(span=8, adjust=False).mean()
 
-        # Gráfico
-        st.subheader("Evolución de la coherencia y del umbral dinámico")
+        # Calculo umbral dinámico
+        phi_0, alpha, beta = 0.75, 0.3, 0.2
+        phi_vals = []
+        for i in range(len(df)):
+            if i < 5:
+                phi_vals.append(phi_0)
+            else:
+                w = df['C_t'][i-5:i]
+                phi_t = phi_0 + alpha * w.std() - beta * w.mean()
+                phi_vals.append(max(0, min(1, phi_t)))
+        df['Phi_t'] = phi_vals
+
+        # Etiquetado de fases
+        fases = []
+        for c, p in zip(df['C_t'], df['Phi_t']):
+            if c > p:
+                fases.append('Alta coherencia' if lang == "es" else "High coherence")
+            elif c < p - 0.1:
+                fases.append('Incoherencia' if lang == "es" else "Incoherence")
+            else:
+                fases.append('Reconfiguración' if lang == "es" else "Reconfiguration")
+        df['fase'] = fases
+
+        # -------------------------
+        # 🌈 Gráfica
+        # -------------------------
+        st.subheader(t["plot_title"][lang])
         fig, ax = plt.subplots()
-        ax.plot(df['coherencia'], label='𝒞(t)')
-        ax.plot(df['phi_dinamico'], label='Φ(t)', linestyle='--')
-        ax.set_xlabel("Turno")
-        ax.set_ylabel("Valor")
-        ax.set_title("Coherencia y Umbral Dinámico")
+        ax.plot(df['C_t'], label='C_t')
+        ax.plot(df['C_t_local'], label='C_t_local')
+        ax.plot(df['C_t_Im'], label='C_t_Im')
+        ax.plot(df['Phi_t'], label='Phi_t', linestyle='--')
         ax.legend()
         st.pyplot(fig)
 
-        # Reporte
-        st.subheader("Reporte automático")
-        reporte_texto = generar_reporte(df)
-        st.markdown(f"```\n{reporte_texto}\n```")
+        # -------------------------
+        # 🔍 Reporte
+        # -------------------------
+        st.subheader(t["report_title"][lang])
+        texto = f"""
+TIE–Dialog Report ({language})\n\nPromedio C_t: {df['C_t'].mean():.3f}\nPromedio Phi_t: {df['Phi_t'].mean():.3f}\nTurnos > Phi_t: {(df['C_t'] > df['Phi_t']).mean() * 100:.1f}%\nFases encontradas:\n"""
+        cambios = df['fase'].ne(df['fase'].shift()).cumsum()
+        resumen = df.groupby(cambios).first().reset_index()
+        for _, row in resumen.iterrows():
+            texto += f"Turno {row['turno'] if 'turno' in row else row.name+1}: {row['fase']}\n"
 
-        # Botón de descarga
-        buffer = StringIO()
-        buffer.write(reporte_texto)
-        buffer.seek(0)
-        st.download_button(
-            label="📥 Descargar reporte como .txt",
-            data=buffer,
-            file_name="reporte_coherencia_TIE_Dialog.txt",
-            mime="text/plain"
-        )
+        st.markdown(f"```\n{texto}\n```")
+
+        # -------------------------
+        # 📄 Descarga
+        # -------------------------
+        st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt")
+        st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv")
+
+        # -------------------------
+        # 🔍 Vista previa
+        # -------------------------
+        st.subheader(t["preview"][lang])
+        st.dataframe(df.head())
+
+
 
