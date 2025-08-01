@@ -113,8 +113,8 @@ else:
     ax.plot(df.index + 1, df['C_t'], label='C_t')
     ax.plot(df.index + 1, df['Phi_t'], label='Φ_t', linestyle='--')
     ax.plot(df.index + 1, df['R'], label='ℛ', linestyle=':')
-    ax.plot(df.index + 1, df['D'], label='𝒟', linestyle='-.')
-    ax.plot(df.index + 1, df['Q_s'], label='𝒬ₛ', linestyle='-')
+    ax.plot(df.index + 1, df['D'], label='D', linestyle='-.')
+    ax.plot(df.index + 1, df['Q_s'], label='Qₛ', linestyle='-')
     ax.set_xlabel("Turno")
     ax.set_ylabel("Valor")
     ax.legend()
@@ -127,7 +127,7 @@ else:
         f"Promedio C_t: {df['C_t'].mean():.3f}\n"
         f"Promedio Φ_t: {df['Phi_t'].mean():.3f}\n"
         f"Promedio ℛ: {df['R'].mean():.3f}\n"
-        f"Promedio 𝒟: {df['D'].mean():.3f}\n"
+        f"Promedio D: {df['D'].mean():.3f}\n"
         f"Promedio 𝒬ₛ: {df['Q_s'].mean():.4f}\n"
         f"Coherencia individual: {coherencias_ind if 'participante' in df.columns else '—'}\n"
         f"Fases: {df['fase'].value_counts().to_dict()}\n"
