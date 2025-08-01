@@ -75,12 +75,12 @@ if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
     # -------------------------
-    # 🔹 Calcular embeddings
+    # 🔹 Calcular embeddings (modelo contextual)
     # -------------------------
     model = SentenceTransformer('intfloat/e5-large-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Coherencia basada en microcontexto extendido (últimos 2 turnos)
+    # Coherencia con contexto extendido (últimos 2 turnos)
     similarities = [1.0]
     for i in range(1, len(embs)):
         context = embs[i-2:i] if i >= 2 else embs[i-1:i]
@@ -95,12 +95,11 @@ else:
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
     # -------------------------
-    # 🔹 Umbral Φ_t dinámico
+    # 🔹 Umbral Φ_t por percentil 80
     # -------------------------
-    media_ct = df['C_t'].mean()
-    desv_ct = df['C_t'].std()
-    sensibilidad = 0.3
-    df['Phi_t'] = (media_ct + sensibilidad * desv_ct).clip(0.0, 1.0)
+    phi_percentil = 80
+    phi_t_value = np.percentile(df['C_t'], phi_percentil)
+    df['Phi_t'] = phi_t_value
 
     # Detección de rupturas
     sim_deltas = [0.0]
@@ -154,11 +153,10 @@ else:
     texto = (
         f"Participantes: {', '.join(participantes) if participantes else '—'}\n"
         f"Promedio C_t: {df['C_t'].mean():.3f}\n"
-        f"Promedio Phi_t: {df['Phi_t'].mean():.3f}\n"
+        f"Umbral Phi_t (percentil {phi_percentil}): {phi_t_value:.3f}\n"
         f"Turnos con C_t > Phi_t: {porcentaje_supera:.1f}%\n"
         f"Rupturas detectadas: {num_rupturas}\n"
         f"Fases: {conteo_fases}\n"
-        f"Sensibilidad utilizada: {sensibilidad}\n"
     )
     st.markdown(f"```\n{texto}\n```")
 
@@ -173,6 +171,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
