@@ -75,40 +75,39 @@ if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
     # -------------------------
-    # 🔹 Calcular embeddings
+    # 🔹 Calcular embeddings (modelo más contextual)
     # -------------------------
-    model = SentenceTransformer('all-mpnet-base-v2')
+    model = SentenceTransformer('intfloat/e5-large-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Similaridades por turno
+    # Similaridades entre turnos consecutivos
     similarities = [1.0]
     for i in range(1, len(embs)):
         sim = util.cos_sim(embs[i], embs[i - 1]).item()
         similarities.append(sim)
     df['similarity'] = similarities
 
-    # Normalización robusta
+    # Normalización
     min_sim = min(similarities[1:])
     max_sim = max(similarities[1:])
     rng = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
     # -------------------------
-    # 🔹 Umbral Φ_t dinámico + sensibilidad ajustable
+    # 🔹 Umbral Φ_t recalibrado
     # -------------------------
     media_ct = df['C_t'].mean()
     desv_ct = df['C_t'].std()
-    sensibilidad = 0.5  # Puedes ajustar este valor entre 0.3 y 0.7 según la rigurosidad deseada
+    sensibilidad = 0.3  # menor sensibilidad = mayor permisividad
     df['Phi_t'] = (media_ct + sensibilidad * desv_ct).clip(0.0, 1.0)
 
-    # Detectar caídas abruptas
+    # Detección de rupturas
     sim_deltas = [0.0]
     for i in range(1, len(df)):
         delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
         sim_deltas.append(delta)
     df['delta_sim'] = sim_deltas
 
-    # Si hay una caída fuerte, ajustar el umbral localmente
     ruptura_mask = df['delta_sim'] < -0.2
     df['ruptura'] = ruptura_mask.astype(int)
     df.loc[ruptura_mask, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
@@ -160,6 +159,7 @@ else:
         f"Turnos con C_t > Phi_t: {porcentaje_supera:.1f}%\n"
         f"Rupturas detectadas: {num_rupturas}\n"
         f"Fases: {conteo_fases}\n"
+        f"Sensibilidad utilizada: {sensibilidad}\n"
     )
     st.markdown(f"```\n{texto}\n```")
 
@@ -174,6 +174,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
