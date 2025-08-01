@@ -1,107 +1,82 @@
+# -*- coding: utf-8 -*-
 from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# -------------------------
-# 🌐 Configuración e idioma
-# -------------------------
-st.set_page_config(page_title="TIE–Dialog Multilingüe", layout="centered")
-language = st.sidebar.selectbox("Choose language / Elegir idioma", options=["English", "Español"], index=1)
-lang = "es" if language == "Español" else "en"
+# ✅ Verificación del modelo
+try:
+    model_test = SentenceTransformer('intfloat/e5-large-v2')
+    test_embs = model_test.encode(["Uno", "Dos"])
+    test_sim = util.cos_sim(test_embs[0], test_embs[1]).item()
+    print(f"[Verificación OK] Similaridad: {test_sim:.4f}")
+except Exception as e:
+    print(f"[Error] No se pudo cargar el modelo: {e}")
 
-# -------------------------
-# 📊 Diccionario de textos
-# -------------------------
-t = {
-    "title": {
-        "es": "🧰 TIE–Dialog: Coherencia, Umbral y Fases",
-        "en": "🧰 TIE–Dialog: Coherence, Threshold and Phases"
-    },
-    "upload": {
-        "es": "📂 Carga un archivo .csv con columna 'texto' (coherencia se calculará automáticamente)",
-        "en": "📂 Upload a .csv file with a 'texto' column (coherence will be calculated automatically)"
-    },
-    "error": {
-        "es": "El archivo debe incluir una columna llamada 'texto'.",
-        "en": "The file must include a column named 'texto'."
-    },
-    "plot_title": {
-        "es": "🔢 Evolución de C_t y Φ_t (umbral)",
-        "en": "🔢 Evolution of C_t and Φ_t (threshold)"
-    },
-    "report_title": {
-        "es": "🔍 Reporte automático",
-        "en": "🔍 Automatic report"
-    },
-    "download_txt": {
-        "es": "📄 Descargar reporte (.txt)",
-        "en": "📄 Download report (.txt)"
-    },
-    "download_csv": {
-        "es": "📄 Descargar datos enriquecidos (.csv)",
-        "en": "📄 Download enriched data (.csv)"
-    },
-    "preview": {
-        "es": "🔍 Vista previa de resultados:",
-        "en": "🔍 Results preview:"
-    }
-}
+# 🌐 Configuración Streamlit
+st.set_page_config(page_title="TIE–Dialog Total", layout="centered")
+lang = "es" if st.sidebar.selectbox("Idioma / Language", ["Español", "English"], index=0) == "Español" else "en"
+st.title("🧰 TIE–Dialog: Coherencia, Resonancia, Dimensionalidad y Qualia")
 
-# -------------------------
-# 📂 Carga CSV y procesamiento
-# -------------------------
-st.title(t["title"][lang])
-uploaded_file = st.file_uploader(t["upload"][lang], type="csv")
+uploaded_file = st.file_uploader("📂 Carga un archivo .csv con columnas 'texto' y 'participante'", type="csv")
 
+# Datos de prueba
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
     df = pd.DataFrame({
         'turno': list(range(1, 7)),
-        'participante': ['Ana', 'Luis', 'Ana', 'Luis', 'Ana', 'Luis'],
+        'participante': ['Ana', 'Luis'] * 3,
         'texto': [
-            "La coherencia informacional puede medirse en conversaciones.",
-            "Exacto, se calcula comparando el sentido entre turnos.",
-            "Hoy llovió mucho en la ciudad.",
-            "¿Crees que la lluvia afecta a la comunicación entre personas?",
-            "El perro de mi vecino ladra todo el día.",
-            "Nada que ver, pero sirve como ejemplo de incoherencia contextual."
+            "La coherencia informacional puede medirse.",
+            "Exacto, se compara el sentido entre turnos.",
+            "El cielo está cubierto hoy.",
+            "¿Crees que el clima afecta el diálogo?",
+            "Mi perro ladra todo el día.",
+            "Un buen ejemplo de ruido contextual."
         ]
     })
 
 if 'texto' not in df.columns:
-    st.error(t["error"][lang])
+    st.error("❌ El archivo debe tener una columna llamada 'texto'.")
 else:
-    # -------------------------
-    # 🔹 Calcular embeddings (modelo contextual)
-    # -------------------------
+    # 🔹 Cargar modelo y calcular embeddings
     model = SentenceTransformer('intfloat/e5-large-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Coherencia con contexto extendido (últimos 2 turnos)
-    similarities = [1.0]
+    similarities, resonancias, dimensionalidades = [1.0], [0.0], [1.0]
     for i in range(1, len(embs)):
         context = embs[i-2:i] if i >= 2 else embs[i-1:i]
         sim = util.cos_sim(embs[i], context.mean(dim=0)).item()
         similarities.append(sim)
-    df['similarity'] = similarities
 
-    # Normalización robusta
+        # ℛ: resonancia como cambio estructural
+        delta = util.cos_sim(embs[i], embs[i-1]).item() - util.cos_sim(embs[i-1], embs[i-2]).item() if i >= 2 else 0
+        r = abs(sim * delta)
+        resonancias.append(r)
+
+        # 𝒟: magnitud del cambio vectorial
+        dif = embs[i] - embs[i-1]
+        D = np.linalg.norm(dif.cpu().numpy())
+        dimensionalidades.append(D)
+
+    df['similarity'] = similarities
+    df['R'] = resonancias
+    df['D'] = dimensionalidades
+
+    # 🔹 Coherencia global normalizada (𝒞ₜ)
     min_sim = min(similarities[1:])
     max_sim = max(similarities[1:])
     rng = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
-    # -------------------------
-    # 🔹 Umbral Φ_t por percentil 80
-    # -------------------------
+    # 🔹 Umbral dinámico Φₜ (percentil 80)
     phi_percentil = 80
     phi_t_value = np.percentile(df['C_t'], phi_percentil)
     df['Phi_t'] = phi_t_value
 
-    # Detección de rupturas
+    # 🔹 Rupturas
     sim_deltas = [0.0]
     for i in range(1, len(df)):
         delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
@@ -110,67 +85,62 @@ else:
     df['ruptura'] = (df['delta_sim'] < -0.2).astype(int)
     df.loc[df['ruptura'] == 1, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
 
-    # -------------------------
-    # 🔹 Clasificación de fases
-    # -------------------------
+    # 🔹 Fases
     fases = []
     for c, p in zip(df['C_t'], df['Phi_t']):
         if c > p:
-            fases.append('Alta coherencia' if lang == "es" else "High coherence")
+            fases.append('Alta coherencia')
         elif c < p - 0.1:
-            fases.append('Incoherencia' if lang == "es" else "Incoherence")
+            fases.append('Incoherencia')
         else:
-            fases.append('Reconfiguración' if lang == "es" else "Reconfiguration")
+            fases.append('Reconfiguración')
     df['fase'] = fases
 
-    # -------------------------
-    # 📊 Gráfico
-    # -------------------------
-    st.subheader(t["plot_title"][lang])
+    # 🔹 Coherencia individual (𝒞ᵢ)
+    if 'participante' in df.columns:
+        coherencias_ind = df.groupby('participante')['C_t'].mean().round(3).to_dict()
+        for p in coherencias_ind:
+            df.loc[df['participante'] == p, 'C_i'] = coherencias_ind[p]
+    else:
+        df['C_i'] = df['C_t']
+
+    # 🔹 Métrica qualia (𝒬ₛ)
+    df['Q_s'] = (df['C_t'] * df['R'] * df['D']).round(4)
+
+    # 📊 Visualización
+    st.subheader("🔢 C_t, Φ_t, ℛ, 𝒟 y 𝒬ₛ")
     fig, ax = plt.subplots()
-    ax.plot(df.index + 1, df['C_t'], label='C_t (normalizado)')
-    ax.plot(df.index + 1, df['Phi_t'], label='Phi_t (umbral)', linestyle='--')
-    ax.scatter(df[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')].index + 1,
-               df[df['fase'] == ('Incoherencia' if lang == 'es' else 'Incoherence')]['C_t'],
-               color='red', label='Incoherencia', marker='x')
-    ax.scatter(df[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')].index + 1,
-               df[df['fase'] == ('Alta coherencia' if lang == 'es' else 'High coherence')]['C_t'],
-               color='green', label='Emergencia', marker='o')
-    ax.set_xlabel('Turno' if lang == 'es' else 'Turn')
-    ax.set_ylabel('Valor' if lang == 'es' else 'Value')
+    ax.plot(df.index + 1, df['C_t'], label='C_t')
+    ax.plot(df.index + 1, df['Phi_t'], label='Φ_t', linestyle='--')
+    ax.plot(df.index + 1, df['R'], label='ℛ', linestyle=':')
+    ax.plot(df.index + 1, df['D'], label='𝒟', linestyle='-.')
+    ax.plot(df.index + 1, df['Q_s'], label='𝒬ₛ', linestyle='-')
+    ax.set_xlabel("Turno")
+    ax.set_ylabel("Valor")
     ax.legend()
     st.pyplot(fig)
 
-    # -------------------------
-    # 📋 Reporte
-    # -------------------------
-    st.subheader(t["report_title"][lang])
+    # 📋 Reporte automático
     participantes = df['participante'].unique().tolist() if 'participante' in df.columns else []
-    porcentaje_supera = (df['C_t'] > df['Phi_t']).mean() * 100
-    conteo_fases = df['fase'].value_counts().to_dict()
-    num_rupturas = int(df['ruptura'].sum())
-
-    texto = (
-        f"Participantes: {', '.join(participantes) if participantes else '—'}\n"
+    resumen = (
+        f"Participantes: {', '.join(participantes)}\n"
         f"Promedio C_t: {df['C_t'].mean():.3f}\n"
-        f"Umbral Phi_t (percentil {phi_percentil}): {phi_t_value:.3f}\n"
-        f"Turnos con C_t > Phi_t: {porcentaje_supera:.1f}%\n"
-        f"Rupturas detectadas: {num_rupturas}\n"
-        f"Fases: {conteo_fases}\n"
+        f"Promedio Φ_t: {df['Phi_t'].mean():.3f}\n"
+        f"Promedio ℛ: {df['R'].mean():.3f}\n"
+        f"Promedio 𝒟: {df['D'].mean():.3f}\n"
+        f"Promedio 𝒬ₛ: {df['Q_s'].mean():.4f}\n"
+        f"Coherencia individual: {coherencias_ind if 'participante' in df.columns else '—'}\n"
+        f"Fases: {df['fase'].value_counts().to_dict()}\n"
+        f"Rupturas detectadas: {int(df['ruptura'].sum())}\n"
     )
-    st.markdown(f"```\n{texto}\n```")
 
-    # -------------------------
-    # 📄 Descargas
-    # -------------------------
-    st.download_button(t["download_txt"][lang], data=texto, file_name="reporte_TIE_Dialog.txt", mime="text/plain")
-    st.download_button(t["download_csv"][lang], data=df.to_csv(index=False), file_name="datos_TIE_Dialog.csv", mime="text/csv")
-
-    # -------------------------
-    # Vista previa final
-    # -------------------------
-    st.subheader(t["preview"][lang])
+    st.subheader("🔍 Reporte automático")
+    st.markdown(f"```\n{resumen}\n```")
+    st.download_button("📄 Descargar reporte", resumen, "reporte_TIE_Dialog.txt")
+    st.download_button("📄 Descargar CSV", df.to_csv(index=False), "datos_TIE_Dialog.csv")
+    st.subheader("📊 Vista previa")
     st.dataframe(df)
+
 
 
 
