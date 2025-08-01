@@ -71,10 +71,11 @@ else:
     rng = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
-    # 🔹 Umbral dinámico Φₜ (percentil 80)
-    phi_percentil = 80
-    phi_t_value = np.percentile(df['C_t'], phi_percentil)
-    df['Phi_t'] = phi_t_value
+    # Umbral Φ_t dinámico basado en media + varianza
+alpha = 0.2
+media_ct = df['C_t'].mean()
+std_ct = df['C_t'].std()
+df['Phi_t'] = (media_ct + alpha * std_ct).clip(0.0, 1.0)
 
     # 🔹 Rupturas
     sim_deltas = [0.0]
