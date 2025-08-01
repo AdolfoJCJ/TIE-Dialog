@@ -75,12 +75,12 @@ if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
     # -------------------------
-    # 🔹 Calcular embeddings (modelo sensible)
+    # 🔹 Calcular embeddings
     # -------------------------
     model = SentenceTransformer('all-mpnet-base-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Calcular similaridades
+    # Similaridades por turno
     similarities = [1.0]
     for i in range(1, len(embs)):
         sim = util.cos_sim(embs[i], embs[i - 1]).item()
@@ -94,25 +94,24 @@ else:
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
     # -------------------------
-    # 🔹 Definir Phi_t como umbral base + detección de caída
+    # 🔹 Umbral Φ_t dinámico + sensibilidad ajustable
     # -------------------------
-    base_phi = 0.75
-    df['Phi_t'] = base_phi
+    media_ct = df['C_t'].mean()
+    desv_ct = df['C_t'].std()
+    sensibilidad = 0.5  # Puedes ajustar este valor entre 0.3 y 0.7 según la rigurosidad deseada
+    df['Phi_t'] = (media_ct + sensibilidad * desv_ct).clip(0.0, 1.0)
 
-    # Detectar rupturas por caída brusca en similaridad
+    # Detectar caídas abruptas
     sim_deltas = [0.0]
     for i in range(1, len(df)):
         delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
         sim_deltas.append(delta)
     df['delta_sim'] = sim_deltas
 
-    # Ruptura: caída mayor a 0.2
+    # Si hay una caída fuerte, ajustar el umbral localmente
     ruptura_mask = df['delta_sim'] < -0.2
     df['ruptura'] = ruptura_mask.astype(int)
-
-    # Elevar Phi_t en rupturas
-    df.loc[ruptura_mask, 'Phi_t'] = df['C_t'] + 0.2
-    df['Phi_t'] = df['Phi_t'].clip(0.0, 1.0)
+    df.loc[ruptura_mask, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
 
     # -------------------------
     # 🔹 Clasificación de fases
@@ -175,6 +174,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
