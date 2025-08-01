@@ -1,24 +1,17 @@
-# -*- coding: utf-8 -*-
 from sentence_transformers import SentenceTransformer, util
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Verificación del modelo
-try:
-    model_test = SentenceTransformer('intfloat/e5-large-v2')
-    test_embs = model_test.encode(["Uno", "Dos"])
-    test_sim = util.cos_sim(test_embs[0], test_embs[1]).item()
-    print(f"[Verificación OK] Similaridad: {test_sim:.4f}")
-except Exception as e:
-    print(f"[Error] No se pudo cargar el modelo: {e}")
+st.set_page_config(page_title="TIE–Dialog Ajustado", layout="centered")
+lang = "es" if st.sidebar.selectbox("Idioma / Language", ["Español", "English"], 0) == "Español" else "en"
+st.title("🧰 TIE–Dialog: Coherencia calibrada, Resonancia, Dimensionalidad, Qualia")
 
-st.set_page_config(page_title="TIE–Dialog Total", layout="centered")
-lang = "es" if st.sidebar.selectbox("Idioma / Language", ["Español", "English"], index=0) == "Español" else "en"
-st.title("🧰 TIE–Dialog: Coherencia, Resonancia, Dimensionalidad y Qualia")
+uploaded_file = st.file_uploader("📂 Carga un .csv con columnas 'texto' y 'participante'", type="csv")
 
-uploaded_file = st.file_uploader("📂 Carga un archivo .csv con columnas 'texto' y 'participante'", type="csv")
+# Modelo base ajustado
+model = SentenceTransformer('all-mpnet-base-v2')
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
@@ -39,16 +32,21 @@ else:
 if 'texto' not in df.columns:
     st.error("❌ El archivo debe tener una columna llamada 'texto'.")
 else:
-    model = SentenceTransformer('intfloat/e5-large-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
     similarities, resonancias, dimensionalidades = [1.0], [0.0], [1.0]
     for i in range(1, len(embs)):
-        context = embs[i-2:i] if i >= 2 else embs[i-1:i]
-        sim = util.cos_sim(embs[i], context.mean(dim=0)).item()
+        sim = util.cos_sim(embs[i], embs[i-1]).item()
         similarities.append(sim)
-        delta = util.cos_sim(embs[i], embs[i-1]).item() - util.cos_sim(embs[i-1], embs[i-2]).item() if i >= 2 else 0
+
+        # Resonancia local (variación en el flujo de similitud)
+        if i >= 2:
+            delta = util.cos_sim(embs[i], embs[i-1]).item() - util.cos_sim(embs[i-1], embs[i-2]).item()
+        else:
+            delta = 0
         resonancias.append(abs(sim * delta))
+
+        # Dimensionalidad informacional (magnitud del cambio vectorial)
         dif = embs[i] - embs[i-1]
         dimensionalidades.append(np.linalg.norm(dif.cpu().numpy()))
 
@@ -56,51 +54,49 @@ else:
     df['R'] = resonancias
     df['D'] = dimensionalidades
 
-    # C_t normalizado
-    min_sim = min(similarities[1:])
-    max_sim = max(similarities[1:])
-    rng = max_sim - min_sim if max_sim > min_sim else 1.0
-    df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
+    # 🔹 Normalización centrada de C_t
+    mean_sim = np.mean(similarities[1:])
+    std_sim = np.std(similarities[1:]) or 1.0
+    df['C_t'] = ((df['similarity'] - mean_sim) / (2 * std_sim) + 0.5).clip(0.0, 1.0)
 
-    # Φ_t dinámico: media + α * std
+    # 🔹 Umbral dinámico con piso
     alpha = 0.2
-    media_ct = df['C_t'].mean()
-    std_ct = df['C_t'].std()
-    df['Phi_t'] = (media_ct + alpha * std_ct).clip(0.0, 1.0)
+    base_phi = 0.5
+    df['Phi_t'] = np.maximum(base_phi, df['C_t'].mean() + alpha * df['C_t'].std()).clip(0.0, 1.0)
 
-    # Rupturas
-    sim_deltas = [0.0]
-    for i in range(1, len(df)):
-        delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
-        sim_deltas.append(delta)
+    # 🔹 Rupturas por caída brusca
+    sim_deltas = [0.0] + [df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity'] for i in range(1, len(df))]
     df['delta_sim'] = sim_deltas
     df['ruptura'] = (df['delta_sim'] < -0.2).astype(int)
     df.loc[df['ruptura'] == 1, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
 
-    # Fases
-    fases = []
-    for c, p in zip(df['C_t'], df['Phi_t']):
+    # 🔹 Fases
+    def clasificar_fase(c, p):
         if c > p:
-            fases.append('Alta coherencia')
+            return 'Alta coherencia'
         elif c < p - 0.1:
-            fases.append('Incoherencia')
+            return 'Incoherencia'
         else:
-            fases.append('Reconfiguración')
-    df['fase'] = fases
+            return 'Reconfiguración'
+    df['fase'] = [clasificar_fase(c, p) for c, p in zip(df['C_t'], df['Phi_t'])]
 
-    # Coherencia individual
+    # 🔹 Coherencia individual C_i
     if 'participante' in df.columns:
         coherencias_ind = df.groupby('participante')['C_t'].mean().round(3).to_dict()
-        for p in coherencias_ind:
-            df.loc[df['participante'] == p, 'C_i'] = coherencias_ind[p]
+        df['C_i'] = df['participante'].map(coherencias_ind)
     else:
         df['C_i'] = df['C_t']
 
-    # Qualia Q_s
+    # 🔹 Qualia Q_s
     df['Q_s'] = (df['C_t'] * df['R'] * df['D']).round(4)
 
-    # Visualización
-    st.subheader("🔢 C_t, Φ_t, ℛ, 𝒟 y 𝒬ₛ")
+    # 🔹 Diagnóstico
+    print("\n>> Similaridades crudas:", similarities)
+    print(">> C_t promedio:", df['C_t'].mean())
+    print(">> Phi_t dinámico:", df['Phi_t'].mean())
+
+    # 🔹 Visualización
+    st.subheader("🔢 Métricas: C_t, Φ_t, ℛ, 𝒟, 𝒬ₛ")
     fig, ax = plt.subplots()
     ax.plot(df.index + 1, df['C_t'], label='C_t')
     ax.plot(df.index + 1, df['Phi_t'], label='Φ_t', linestyle='--')
@@ -112,7 +108,8 @@ else:
     ax.legend()
     st.pyplot(fig)
 
-    # Reporte
+    # 🔹 Reporte
+    st.subheader("📋 Reporte")
     participantes = df['participante'].unique().tolist() if 'participante' in df.columns else []
     resumen = (
         f"Participantes: {', '.join(participantes)}\n"
@@ -125,13 +122,12 @@ else:
         f"Fases: {df['fase'].value_counts().to_dict()}\n"
         f"Rupturas detectadas: {int(df['ruptura'].sum())}\n"
     )
-
-    st.subheader("🔍 Reporte automático")
     st.markdown(f"```\n{resumen}\n```")
     st.download_button("📄 Descargar reporte", resumen, "reporte_TIE_Dialog.txt")
     st.download_button("📄 Descargar CSV", df.to_csv(index=False), "datos_TIE_Dialog.csv")
-    st.subheader("📊 Vista previa")
+    st.subheader("🔍 Vista previa")
     st.dataframe(df)
+
 
 
 
