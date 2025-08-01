@@ -75,30 +75,31 @@ if 'texto' not in df.columns:
     st.error(t["error"][lang])
 else:
     # -------------------------
-    # 🔹 Calcular embeddings (modelo más contextual)
+    # 🔹 Calcular embeddings
     # -------------------------
     model = SentenceTransformer('intfloat/e5-large-v2')
     embs = model.encode(df['texto'].tolist(), convert_to_tensor=True)
 
-    # Similaridades entre turnos consecutivos
+    # Coherencia basada en microcontexto extendido (últimos 2 turnos)
     similarities = [1.0]
     for i in range(1, len(embs)):
-        sim = util.cos_sim(embs[i], embs[i - 1]).item()
+        context = embs[i-2:i] if i >= 2 else embs[i-1:i]
+        sim = util.cos_sim(embs[i], context.mean(dim=0)).item()
         similarities.append(sim)
     df['similarity'] = similarities
 
-    # Normalización
+    # Normalización robusta
     min_sim = min(similarities[1:])
     max_sim = max(similarities[1:])
     rng = max_sim - min_sim if max_sim > min_sim else 1.0
     df['C_t'] = ((df['similarity'] - min_sim) / rng).clip(0.0, 1.0)
 
     # -------------------------
-    # 🔹 Umbral Φ_t recalibrado
+    # 🔹 Umbral Φ_t dinámico
     # -------------------------
     media_ct = df['C_t'].mean()
     desv_ct = df['C_t'].std()
-    sensibilidad = 0.3  # menor sensibilidad = mayor permisividad
+    sensibilidad = 0.3
     df['Phi_t'] = (media_ct + sensibilidad * desv_ct).clip(0.0, 1.0)
 
     # Detección de rupturas
@@ -107,10 +108,8 @@ else:
         delta = df.loc[i, 'similarity'] - df.loc[i - 1, 'similarity']
         sim_deltas.append(delta)
     df['delta_sim'] = sim_deltas
-
-    ruptura_mask = df['delta_sim'] < -0.2
-    df['ruptura'] = ruptura_mask.astype(int)
-    df.loc[ruptura_mask, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
+    df['ruptura'] = (df['delta_sim'] < -0.2).astype(int)
+    df.loc[df['ruptura'] == 1, 'Phi_t'] = (df['C_t'] + 0.15).clip(0.0, 1.0)
 
     # -------------------------
     # 🔹 Clasificación de fases
@@ -174,6 +173,7 @@ else:
     # -------------------------
     st.subheader(t["preview"][lang])
     st.dataframe(df)
+
 
 
 
