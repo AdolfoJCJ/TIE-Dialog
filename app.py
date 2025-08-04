@@ -6,44 +6,44 @@ import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer, util
 
-# Cargar modelo y forzar CPU si no hay GPU
+# Cargar modelo y forzar CPU si no hay GPU disponible
 model = SentenceTransformer('all-mpnet-base-v2')
 model = model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 # Multilenguaje
-lang = st.selectbox("🌐 Choose language / Elige idioma", ["Español", "English"])
+lang = st.selectbox("\ud83c\udf10 Choose language / Elige idioma", ["Espa\u00f1ol", "English"])
 text = {
-    "Español": {
-        "title": "🧠 TIE–Dialog: Análisis Avanzado de Coherencia Dialogal",
-        "uploader": "📂 Carga un archivo .csv con columnas 'turno', 'participante' y 'texto'",
+    "Espa\u00f1ol": {
+        "title": "\ud83e\udde0 TIE–Dialog: An\u00e1lisis Avanzado de Coherencia Dialogal",
+        "uploader": "\ud83d\udcc2 Carga un archivo .csv con columnas 'turno', 'participante' y 'texto'",
         "slider": "Umbral de ruptura (Φ)",
-        "upload_success": "✅ Archivo cargado correctamente.",
-        "upload_error": "❌ El archivo debe tener columnas 'texto' y 'participante'.",
-        "chart_title": "📈 Curva de Coherencia C_t",
-        "ruptures_title": "📉 Rupturas detectadas",
-        "no_ruptures": "✅ No se detectaron rupturas informacionales.",
-        "ruptures_found": "⚠️ Se detectaron {} rupturas.",
-        "report_title": "📋 Informe estructural",
-        "table_title": "📄 Tabla completa de análisis",
-        "export_csv": "⬇️ Exportar resultados como CSV",
-        "download_pdf": "📄 Descargar informe PDF (no disponible)",
-        "graph_title": "🧭 Mapa de nodos informacionales"
+        "upload_success": "\u2705 Archivo cargado correctamente.",
+        "upload_error": "\u274c El archivo debe tener columnas 'texto' y 'participante'.",
+        "chart_title": "\ud83d\udcc8 Curva de Coherencia C_t",
+        "ruptures_title": "\ud83d\udcc9 Rupturas detectadas",
+        "no_ruptures": "\u2705 No se detectaron rupturas informacionales.",
+        "ruptures_found": "\u26a0\ufe0f Se detectaron {} rupturas.",
+        "report_title": "\ud83d\udccb Informe estructural",
+        "table_title": "\ud83d\udcc4 Tabla completa de an\u00e1lisis",
+        "export_csv": "\u2b07\ufe0f Exportar resultados como CSV",
+        "download_pdf": "\ud83d\udcc4 Descargar informe PDF (no disponible)",
+        "graph_title": "\ud83d\udded Mapa de nodos informacionales"
     },
     "English": {
-        "title": "🧠 TIE–Dialog: Advanced Dialog Coherence Analysis",
-        "uploader": "📂 Upload a .csv file with columns 'turno', 'participante' and 'texto'",
+        "title": "\ud83e\udde0 TIE–Dialog: Advanced Dialog Coherence Analysis",
+        "uploader": "\ud83d\udcc2 Upload a .csv file with columns 'turno', 'participante' and 'texto'",
         "slider": "Rupture Threshold (Φ)",
-        "upload_success": "✅ File successfully loaded.",
-        "upload_error": "❌ File must have 'texto' and 'participante' columns.",
-        "chart_title": "📈 Coherence Curve C_t",
-        "ruptures_title": "📉 Detected Ruptures",
-        "no_ruptures": "✅ No informational ruptures detected.",
-        "ruptures_found": "⚠️ {} ruptures detected.",
-        "report_title": "📋 Structural Summary",
-        "table_title": "📄 Full Analysis Table",
-        "export_csv": "⬇️ Export results as CSV",
-        "download_pdf": "📄 Download PDF Report (not available)",
-        "graph_title": "🧭 Informational Node Map"
+        "upload_success": "\u2705 File successfully loaded.",
+        "upload_error": "\u274c File must have 'texto' and 'participante' columns.",
+        "chart_title": "\ud83d\udcc8 Coherence Curve C_t",
+        "ruptures_title": "\ud83d\udcc9 Detected Ruptures",
+        "no_ruptures": "\u2705 No informational ruptures detected.",
+        "ruptures_found": "\u26a0\ufe0f {} ruptures detected.",
+        "report_title": "\ud83d\udccb Structural Summary",
+        "table_title": "\ud83d\udcc4 Full Analysis Table",
+        "export_csv": "\u2b07\ufe0f Export results as CSV",
+        "download_pdf": "\ud83d\udcc4 Download PDF Report (not available)",
+        "graph_title": "\ud83d\udded Informational Node Map"
     }
 }
 
@@ -155,6 +155,34 @@ weights = [G[u][v]['weight'] for u, v in G.edges()]
 plt.figure(figsize=(10, 5))
 nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
 st.pyplot(plt)
+
+# Explicación de resultados
+st.markdown("### 🧠 " + ("Interpretación de Resultados" if lang == "Español" else "Interpretation of Results"))
+if lang == "Español":
+    st.markdown("""
+**Coherencia global (`Cₕ`)** representa la continuidad informacional entre turnos consecutivos. Valores cercanos a 1.0 indican que la conversación fluye sin saltos temáticos importantes.
+
+**El umbral Φ** es el punto a partir del cual se considera que hay una **ruptura informacional**. Una ruptura significa que el diálogo pierde coherencia, cambia bruscamente de tema o aparece ruido conceptual.
+
+**Coherencia individual (`Cₕₚ`)** indica cuánto se mantiene consistente cada participante consigo mismo. Comparar estas curvas permite ver quién mantiene su foco conversacional más estable.
+
+**El informe estructural** resume los valores clave: promedio de coherencia, número de rupturas y el turno con menor continuidad. Ayuda a evaluar la calidad del diálogo como sistema coherente.
+
+**El grafo de nodos informacionales** representa cada turno como un nodo y la coherencia como enlaces. Enlaces más fuertes significan más continuidad. Un grafo disperso o débil indica ruptura de sentido.
+""")
+else:
+    st.markdown("""
+**Global coherence (`Cₕ`)** reflects the informational continuity between consecutive turns. Values near 1.0 mean the conversation flows smoothly without major thematic jumps.
+
+**The Φ threshold** defines when a **rupture** is detected — a point where the dialogue loses coherence, shifts abruptly in topic, or introduces noise.
+
+**Individual coherence (`Cₕₚ`)** shows how consistent each participant is with their own previous turns. Comparing them reveals who maintains a more stable focus.
+
+**The structural summary** highlights key values: average coherence, rupture count, and the least coherent turn. It helps assess the dialogue as a coherent system.
+
+**The informational node graph** shows each turn as a node, with coherence as edges. Stronger edges indicate smoother flow. A scattered graph means meaning is breaking down.
+""")
+
 
 
 
