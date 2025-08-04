@@ -3,12 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import torch
 from sentence_transformers import SentenceTransformer, util
 
-# Cargar modelo y forzar CPU si no hay GPU disponible
+# Cargar modelo sin mover manualmente a dispositivo (compatible con Python 3.13)
 model = SentenceTransformer('all-mpnet-base-v2')
-model = model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 # Multilenguaje
 lang = st.selectbox("\ud83c\udf10 Choose language / Elige idioma", ["Espa\u00f1ol", "English"])
@@ -156,7 +154,6 @@ plt.figure(figsize=(10, 5))
 nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
 st.pyplot(plt)
 
-# Explicación de resultados
 st.markdown("### 🧠 " + ("Interpretación de Resultados" if lang == "Español" else "Interpretation of Results"))
 if lang == "Español":
     st.markdown("""
@@ -182,6 +179,7 @@ else:
 
 **The informational node graph** shows each turn as a node, with coherence as edges. Stronger edges indicate smoother flow. A scattered graph means meaning is breaking down.
 """)
+
 
 
 
