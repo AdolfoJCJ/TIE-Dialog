@@ -5,17 +5,13 @@ import networkx as nx
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer, util
-from io import BytesIO
-from fpdf import FPDF
+# from fpdf import FPDF  # Temporalmente desactivado
 
-# Forzar uso de CPU
 device = "cpu"
 model = SentenceTransformer('all-mpnet-base-v2', device=torch.device(device))
 
 # Multilenguaje
 lang = st.selectbox("🌐 Choose language / Elige idioma", ["Español", "English"])
-
-# Textos multilingües
 text = {
     "Español": {
         "title": "🧠 TIE–Dialog: Análisis Avanzado de Coherencia Dialogal",
@@ -30,7 +26,7 @@ text = {
         "report_title": "📋 Informe estructural",
         "table_title": "📄 Tabla completa de análisis",
         "export_csv": "⬇️ Exportar resultados como CSV",
-        "download_pdf": "📄 Descargar informe PDF",
+        "download_pdf": "📄 Descargar informe PDF (no disponible)",
         "graph_title": "🧭 Mapa de nodos informacionales"
     },
     "English": {
@@ -46,18 +42,17 @@ text = {
         "report_title": "📋 Structural Summary",
         "table_title": "📄 Full Analysis Table",
         "export_csv": "⬇️ Export results as CSV",
-        "download_pdf": "📄 Download PDF Report",
+        "download_pdf": "📄 Download PDF Report (not available)",
         "graph_title": "🧭 Informational Node Map"
     }
 }
 
-# UI
 st.set_page_config(page_title="TIE–Dialog Avanzado", layout="wide")
 st.title(text[lang]["title"])
+
 uploaded_file = st.file_uploader(text[lang]["uploader"], type="csv")
 rupture_threshold = st.slider(text[lang]["slider"], 0.0, 1.0, 0.65)
 
-# Datos por defecto si no se sube archivo
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
@@ -72,19 +67,16 @@ else:
         ]
     })
 
-# Validación
 if not {'texto', 'participante'}.issubset(df.columns):
     st.error(text[lang]["upload_error"])
     st.stop()
 else:
     st.success(text[lang]["upload_success"])
 
-# Embeddings
 textos = df['texto'].tolist()
 participantes = df['participante'].tolist()
 embs = model.encode(textos, convert_to_tensor=True)
 
-# Coherencia entre turnos consecutivos
 C_t = [1.0]
 rupturas = [False]
 for i in range(1, len(embs)):
@@ -94,7 +86,6 @@ for i in range(1, len(embs)):
 df['C_t'] = C_t
 df['ruptura'] = rupturas
 
-# Coherencia por participante
 coherencia_individual = {}
 for p in set(participantes):
     idxs = df[df['participante'] == p].index
@@ -108,7 +99,7 @@ for p in set(participantes):
     coherencia_individual[p] = coh_full
     df[f'C_t_{p}'] = coh_full
 
-# Visualización curva C_t
+# Gráfico de coherencia
 st.subheader(text[lang]["chart_title"])
 fig, ax = plt.subplots()
 ax.plot(df.index + 1, df['C_t'], marker='o', label='C_t (global)')
@@ -130,7 +121,7 @@ else:
     st.warning(text[lang]["ruptures_found"].format(len(rupt_df)))
     st.dataframe(rupt_df[['turno', 'participante', 'texto', 'C_t']])
 
-# Informe estructural
+# Informe
 st.subheader(text[lang]["report_title"])
 resumen = {
     "C_t (global)": round(df['C_t'].mean(), 4),
@@ -143,11 +134,11 @@ for p in coherencia_individual:
         resumen[f'C_t promedio ({p})'] = round(valores.mean(), 4)
 st.json(resumen)
 
-# Tabla
+# Tabla final
 st.subheader(text[lang]["table_title"])
 st.dataframe(df[['turno', 'participante', 'texto', 'C_t', 'ruptura'] + [f'C_t_{p}' for p in coherencia_individual]])
 
-# Exportar CSV
+# CSV descargable
 st.download_button(
     label=text[lang]["export_csv"],
     data=df.to_csv(index=False).encode('utf-8'),
@@ -155,29 +146,10 @@ st.download_button(
     mime="text/csv"
 )
 
-# Informe PDF
-def generar_pdf(resumen, rupt_df, lang):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt=text[lang]["report_title"], ln=True)
-    for key, value in resumen.items():
-        pdf.cell(200, 10, txt=f"{key}: {value}", ln=True)
-    pdf.cell(200, 10, txt="", ln=True)
-    pdf.cell(200, 10, txt=text[lang]["ruptures_title"], ln=True)
-    for _, row in rupt_df.iterrows():
-        pdf.multi_cell(0, 10, f"{row['turno']} - {row['participante']}: {row['texto']} (C_t={row['C_t']})")
-    return pdf.output(dest='S').encode('latin-1')
+# PDF deshabilitado
+st.info(text[lang]["download_pdf"])
 
-pdf_bytes = generar_pdf(resumen, rupt_df, lang)
-st.download_button(
-    label=text[lang]["download_pdf"],
-    data=pdf_bytes,
-    file_name="TIE-Dialog-informe.pdf",
-    mime="application/pdf"
-)
-
-# Mapa de nodos
+# Grafo de nodos informacionales
 st.subheader(text[lang]["graph_title"])
 G = nx.Graph()
 for i in range(len(df) - 1):
@@ -190,6 +162,7 @@ weights = [G[u][v]['weight'] for u, v in G.edges()]
 plt.figure(figsize=(10, 5))
 nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
 st.pyplot(plt)
+
 
 
 
