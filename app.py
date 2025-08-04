@@ -6,7 +6,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer, util
 
 # Cargar modelo sin mover manualmente a dispositivo (compatible con Python 3.13)
-model = SentenceTransformer('all-mpnet-base-v2')
+model = SentenceTransformer('all-mpnet-base-v2', device='cpu')
 
 # Multilenguaje
 lang = st.selectbox("Choose language / Elige idioma", ["Español", "English"])
