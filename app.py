@@ -5,10 +5,10 @@ import networkx as nx
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer, util
-# from fpdf import FPDF  # Temporalmente desactivado
 
-device = "cpu"
-model = SentenceTransformer('all-mpnet-base-v2', device=torch.device(device))
+# Cargar modelo y forzar CPU si no hay GPU
+model = SentenceTransformer('all-mpnet-base-v2')
+model = model.to("cuda" if torch.cuda.is_available() else "cpu")
 
 # Multilenguaje
 lang = st.selectbox("🌐 Choose language / Elige idioma", ["Español", "English"])
@@ -47,7 +47,7 @@ text = {
     }
 }
 
-st.set_page_config(page_title="TIE–Dialog Avanzado", layout="wide")
+st.set_page_config(page_title="TIE–Dialog", layout="wide")
 st.title(text[lang]["title"])
 
 uploaded_file = st.file_uploader(text[lang]["uploader"], type="csv")
@@ -99,7 +99,6 @@ for p in set(participantes):
     coherencia_individual[p] = coh_full
     df[f'C_t_{p}'] = coh_full
 
-# Gráfico de coherencia
 st.subheader(text[lang]["chart_title"])
 fig, ax = plt.subplots()
 ax.plot(df.index + 1, df['C_t'], marker='o', label='C_t (global)')
@@ -112,7 +111,6 @@ ax.set_ylim(0, 1.1)
 ax.legend()
 st.pyplot(fig)
 
-# Rupturas
 st.subheader(text[lang]["ruptures_title"])
 rupt_df = df[df['ruptura']]
 if rupt_df.empty:
@@ -121,7 +119,6 @@ else:
     st.warning(text[lang]["ruptures_found"].format(len(rupt_df)))
     st.dataframe(rupt_df[['turno', 'participante', 'texto', 'C_t']])
 
-# Informe
 st.subheader(text[lang]["report_title"])
 resumen = {
     "C_t (global)": round(df['C_t'].mean(), 4),
@@ -134,11 +131,9 @@ for p in coherencia_individual:
         resumen[f'C_t promedio ({p})'] = round(valores.mean(), 4)
 st.json(resumen)
 
-# Tabla final
 st.subheader(text[lang]["table_title"])
 st.dataframe(df[['turno', 'participante', 'texto', 'C_t', 'ruptura'] + [f'C_t_{p}' for p in coherencia_individual]])
 
-# CSV descargable
 st.download_button(
     label=text[lang]["export_csv"],
     data=df.to_csv(index=False).encode('utf-8'),
@@ -146,10 +141,8 @@ st.download_button(
     mime="text/csv"
 )
 
-# PDF deshabilitado
 st.info(text[lang]["download_pdf"])
 
-# Grafo de nodos informacionales
 st.subheader(text[lang]["graph_title"])
 G = nx.Graph()
 for i in range(len(df) - 1):
@@ -162,6 +155,7 @@ weights = [G[u][v]['weight'] for u, v in G.edges()]
 plt.figure(figsize=(10, 5))
 nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
 st.pyplot(plt)
+
 
 
 
