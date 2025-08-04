@@ -9,39 +9,39 @@ from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-mpnet-base-v2')
 
 # Multilenguaje
-lang = st.selectbox("\ud83c\udf10 Choose language / Elige idioma", ["Espa\u00f1ol", "English"])
+lang = st.selectbox("Choose language / Elige idioma", ["Español", "English"])
 text = {
-    "Espa\u00f1ol": {
-        "title": "\ud83e\udde0 TIE–Dialog: An\u00e1lisis Avanzado de Coherencia Dialogal",
-        "uploader": "\ud83d\udcc2 Carga un archivo .csv con columnas 'turno', 'participante' y 'texto'",
+    "Español": {
+        "title": "TIE–Dialog: Análisis Avanzado de Coherencia Dialogal",
+        "uploader": "Carga un archivo .csv con columnas 'turno', 'participante' y 'texto'",
         "slider": "Umbral de ruptura (Φ)",
-        "upload_success": "\u2705 Archivo cargado correctamente.",
-        "upload_error": "\u274c El archivo debe tener columnas 'texto' y 'participante'.",
-        "chart_title": "\ud83d\udcc8 Curva de Coherencia C_t",
-        "ruptures_title": "\ud83d\udcc9 Rupturas detectadas",
-        "no_ruptures": "\u2705 No se detectaron rupturas informacionales.",
-        "ruptures_found": "\u26a0\ufe0f Se detectaron {} rupturas.",
-        "report_title": "\ud83d\udccb Informe estructural",
-        "table_title": "\ud83d\udcc4 Tabla completa de an\u00e1lisis",
-        "export_csv": "\u2b07\ufe0f Exportar resultados como CSV",
-        "download_pdf": "\ud83d\udcc4 Descargar informe PDF (no disponible)",
-        "graph_title": "\ud83d\udded Mapa de nodos informacionales"
+        "upload_success": "Archivo cargado correctamente.",
+        "upload_error": "El archivo debe tener columnas 'texto' y 'participante'.",
+        "chart_title": "Curva de Coherencia C_t",
+        "ruptures_title": "Rupturas detectadas",
+        "no_ruptures": "No se detectaron rupturas informacionales.",
+        "ruptures_found": "Se detectaron {} rupturas.",
+        "report_title": "Informe estructural",
+        "table_title": "Tabla completa de análisis",
+        "export_csv": "Exportar resultados como CSV",
+        "download_pdf": "Descargar informe PDF (no disponible)",
+        "graph_title": "Mapa de nodos informacionales"
     },
     "English": {
-        "title": "\ud83e\udde0 TIE–Dialog: Advanced Dialog Coherence Analysis",
-        "uploader": "\ud83d\udcc2 Upload a .csv file with columns 'turno', 'participante' and 'texto'",
+        "title": "TIE–Dialog: Advanced Dialog Coherence Analysis",
+        "uploader": "Upload a .csv file with columns 'turno', 'participante' and 'texto'",
         "slider": "Rupture Threshold (Φ)",
-        "upload_success": "\u2705 File successfully loaded.",
-        "upload_error": "\u274c File must have 'texto' and 'participante' columns.",
-        "chart_title": "\ud83d\udcc8 Coherence Curve C_t",
-        "ruptures_title": "\ud83d\udcc9 Detected Ruptures",
-        "no_ruptures": "\u2705 No informational ruptures detected.",
-        "ruptures_found": "\u26a0\ufe0f {} ruptures detected.",
-        "report_title": "\ud83d\udccb Structural Summary",
-        "table_title": "\ud83d\udcc4 Full Analysis Table",
-        "export_csv": "\u2b07\ufe0f Export results as CSV",
-        "download_pdf": "\ud83d\udcc4 Download PDF Report (not available)",
-        "graph_title": "\ud83d\udded Informational Node Map"
+        "upload_success": "File successfully loaded.",
+        "upload_error": "File must have 'texto' and 'participante' columns.",
+        "chart_title": "Coherence Curve C_t",
+        "ruptures_title": "Detected Ruptures",
+        "no_ruptures": "No informational ruptures detected.",
+        "ruptures_found": "{} ruptures detected.",
+        "report_title": "Structural Summary",
+        "table_title": "Full Analysis Table",
+        "export_csv": "Export results as CSV",
+        "download_pdf": "Download PDF Report (not available)",
+        "graph_title": "Informational Node Map"
     }
 }
 
@@ -154,7 +154,7 @@ plt.figure(figsize=(10, 5))
 nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color=weights, width=2.0, edge_cmap=plt.cm.Blues)
 st.pyplot(plt)
 
-st.markdown("### 🧠 " + ("Interpretación de Resultados" if lang == "Español" else "Interpretation of Results"))
+st.markdown("### " + ("Interpretación de Resultados" if lang == "Español" else "Interpretation of Results"))
 if lang == "Español":
     st.markdown("""
 **Coherencia global (`Cₕ`)** representa la continuidad informacional entre turnos consecutivos. Valores cercanos a 1.0 indican que la conversación fluye sin saltos temáticos importantes.
