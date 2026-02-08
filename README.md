@@ -1,77 +1,119 @@
 
-# 🧠 TIE–Dialog — Public Demo
 
-TIE–Dialog es una herramienta basada en la **Teoría de la Emergencia Informacional (TEI)** que permite analizar la coherencia estructural de un diálogo humano.  
-**TIE–Dialog is a tool based on the Theory of Informational Emergence (TIE) that analyzes the structural coherence of human dialogues.**
+🌀 TIE–Dialog — Coherence Explorer (CNøde)
 
----
+TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
+It models coherence as a dynamic signal (**Cₜ**) and supports the detection of **breakdown–repair dynamics (S–B–R)**, emergent coherence thresholds (**Φ**), participant-level trajectories (**Cᵢ**), and a geometric layer (**IC–III**) over an induced semantic trajectory.
 
-## 🇪🇸 Español
+> **Important note:** TIE–Dialog is inspired by the Theory of Informational Emergence (TIE), but the software itself is **theory-agnostic**. It makes no ontological assumptions and operates purely on measurable conversational structure.
 
-### 🧩 ¿Qué hace TIE–Dialog?
 
-- Calcula la **coherencia local** entre turnos de diálogo (𝒞ₜ)  
-- Evalúa la **coherencia con el campo estructurante** Im (𝒞ₜ_Im)  
-- Muestra la **evolución por hablante** (𝒞ᵢ)  
-- Detecta **rupturas informacionales**  
-- Genera gráficos interactivos y resultados exportables
+🚀 Quickstart
 
-### 📁 ¿Cómo usarlo?
-
-1. Sube un archivo `.csv` con las siguientes columnas:
-   - `speaker`: nombre o código del hablante
-   - `timestamp`: marca temporal (opcional)
-   - `text`: contenido de cada intervención
-
-2. Espera el análisis automático y explora los gráficos, métricas y rupturas detectadas.
-
-3. Descarga los resultados como `.csv` para análisis posterior.
-
-### 💻 Ejecutar localmente
-
-```bash
+bash
 pip install -r requirements.txt
 streamlit run app.py
-```
+
+
+🧩 What does TIE–Dialog do?
+
+* Computes turn-by-turn coherence signals:
+
+  * Ct_new (context-aware coherence)
+  * IC-IIa (sigma alignment coherence)
+  * Ct_old (adjacent-turn baseline)
+  * Automatically estimates emergent thresholds:
+
+  * Φ_low and Φ_high (percentile-based by default)
+    
+  * Detects dynamic regimes and events:
+
+  * **S** = stable
+  * **B** = breakdown
+  * **R** = repair
+* Extracts triadic units (S–B–R quanta) and supports breakdown–repair asymmetry analysis
+* Tracks participant trajectories:
+
+  * Cᵢ (embedding-based individual coherence)
+  * state trajectories (continuous speaker lines)
+  * Adds an **IC–III geometric layer**:
+
+  * distance **dᵢ**
+  * curvature **κᵢ**
+  * informational time parameterization **τ(t)**
+  * Includes an **IC–III → IC–II bridge module**:
+
+  * semantic compactness **ρ(t)**
+  * structural stress driver **Dₜ**
+  * phenomenological coherence proxy **Ĉₜ**
+  * structural lag estimation **Δ***
+
+
+📁 Dataset format
+
+Upload a `.csv` or `.xlsx` file with the following columns:
+
+Required
+
+* `turn` (int) — turn index
+* `participant` (str) — speaker label
+* `text` (str) — utterance content
+
+Optional
+
+* `timestamp`
+
+> If `turn` is missing, the app generates it automatically.
 
 ---
 
-## 🇬🇧 English
+📤 Outputs (downloads)
 
-### 🧩 What does TIE–Dialog do?
+TIE–Dialog supports exporting:
 
-- Computes **local coherence** between dialogue turns (𝒞ₜ)  
-- Evaluates **coherence with the structuring field** Im (𝒞ₜ_Im)  
-- Displays **individual speaker evolution** (𝒞ᵢ)  
-- Detects **informational ruptures**  
-- Generates interactive plots and exportable results
+* `tie_dialog_full_results.csv`
+  Full per-turn table including coherence signals, regimes, rupture/repair markers, IC-II and IC-III metrics, and participant trajectories.
 
-### 📁 How to use it?
+* `tie_dialog_triadic_quanta.csv`
+  Extracted S–B–R triadic units (minimal breakdown–repair structures).
 
-1. Upload a `.csv` file with the following columns:
-   - `speaker`: speaker name or label
-   - `timestamp`: time mark (optional)
-   - `text`: content of each utterance
+* `tie_dialog_ic2_dynamics.csv`
+  IC-II dynamics and transition metrics (e.g., residuals, asynchrony, normalized informational change).
 
-2. The tool will automatically process and visualize:
-   - Coherence over time
-   - Speaker-specific trends
-   - Detected ruptures
+* `tie_dialog_ic3_geometry.csv`
+  IC–III geometric layer (dᵢ, κᵢ, τ) and the structural driver Dₜ.
 
-3. Download results as `.csv` for further analysis.
+* `tie_dialog_main_plot.html`
+  Interactive export of the main coherence plot.
 
-### 💻 Run locally
+* `tie_dialog_consultancy_report.pdf`
+  A readable, narrative PDF report designed for interpretation and applied use cases.
 
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
 
----
+🔎 Representation modes
 
-## ✨ Créditos | Credits
+TIE–Dialog supports semantic representations via:
 
-Creado por / Created by **Adolfo J. Céspedes Jiménez**  
-Basado en la / Based on the **Theory of Informational Emergence (TEI)**  
-🔗 [ResearchGate profile](https://www.researchgate.net/profile/Adolfo-Cespedes)  
-🔗 [Zenodo preprints](https://zenodo.org/search?page=1&size=20&q=adolfo%20cespedes)
+* **SBERT embeddings** (recommended when available)
+* **TF-IDF / bag-of-words fallback** (for lightweight environments)
+
+The selected mode is displayed in the UI during analysis.
+
+
+⚠️ Notes & limitations
+
+* Φ thresholds are **operational** and depend on the chosen coherence mode and dataset.
+* Event detection is parameter-sensitive by design (the goal is interpretability, not black-box classification).
+* Results are best interpreted comparatively (within-dialogue dynamics), rather than as absolute universal constants.
+
+
+📌 License
+
+This project is released under the MIT License.
+See the LICENSE file for details.
+
+📚 Citation
+
+If you use TIE–Dialog in academic work, please cite it using the metadata provided in CITATION.cff.
+
+You can also cite the corresponding preprints and software releases hosted on Zenodo and ResearchGate.
