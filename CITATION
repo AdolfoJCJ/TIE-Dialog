@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use TIE–Dialog in academic work, please cite it as below."
+title: "TIE–Dialog: A Tool for Dynamic Conversational Coherence Analysis"
+type: software
+authors:
+  - family-names: "Céspedes Jiménez"
+    given-names: "Adolfo J."
+    orcid: "https://orcid.org/0009-0003-3026-7611"
+repository-code: "https://github.com/AdolfoJCJ/TIE-Dialog"
+abstract: >
+  TIE–Dialog is an open-source tool for dynamic, turn-by-turn analysis of conversational coherence.
+  It models coherence as a time-indexed signal and detects emergent thresholds, rupture–repair events,
+  and participant-level trajectories, supporting reproducible exploratory analysis and reporting.
+keywords:
+  - conversational coherence
+  - dialogue analysis
+  - rupture and repair
+  - dynamic metrics
+  - semantic similarity
+  - computational linguistics
+  - streamlit
+  - TIE
+license: "MIT"
+version: "1.0.0"
+date-released: "2026-02-09"
