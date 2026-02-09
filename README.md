@@ -1,6 +1,7 @@
 
 
 🌀 TIE–Dialog — Coherence Explorer (CNøde)
+<img width="849" height="560" alt="newplot - 2026-02-09T120007 172" src="https://github.com/user-attachments/assets/069230b8-27b7-4c69-8874-3f76d444fd1a" />
 
 TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
 It models coherence as a dynamic signal (**Cₜ**) and supports the detection of **breakdown–repair dynamics (S–B–R)**, emergent coherence thresholds (**Φ**), participant-level trajectories (**Cᵢ**), and a geometric layer (**IC–III**) over an induced semantic trajectory.
