@@ -1,6 +1,12 @@
 
 
 🌀 TIE–Dialog — Coherence Explorer (CNøde)
+
+## 🌐 Live Demo (Hugging Face Spaces)
+
+👉 **Run TIE–Dialog in your browser:**  
+(https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog)
+
 <img width="849" height="560" alt="newplot - 2026-02-09T120007 172" src="https://github.com/user-attachments/assets/069230b8-27b7-4c69-8874-3f76d444fd1a" />
 
 TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
