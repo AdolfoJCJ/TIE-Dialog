@@ -1,6 +1,10 @@
-streamlit
-sentence-transformers
+streamlit>=1.31
+sentence-transformers>=2.2.2
 torch
-pandas
-matplotlib
-networkx
+numpy>=1.23
+pandas>=2.0,<3.0
+scikit-learn>=1.2
+matplotlib>=3.7
+plotly>=5.18
+networkx>=3.0
+
