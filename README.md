@@ -1,6 +1,6 @@
 
 
-🌀 TIE–Dialog — Coherence Explorer (CNøde)
+ TIE–Dialog — 📈 Conversational Dynamics Lab 📉 (CNøde)
 
 ## 🌐 Live Demo (Hugging Face Spaces)
 
@@ -24,37 +24,69 @@ streamlit run app.py
 
 🧩 What does TIE–Dialog do?
 
-* Computes turn-by-turn coherence signals:
+TIE–Dialog models dialogue as a time-evolving coherence system and provides complementary signal- and structure-level analyses.
 
-  * Ct_new (context-aware coherence)
-  * IC-IIa (sigma alignment coherence)
-  * Ct_old (adjacent-turn baseline)
-  * Automatically estimates emergent thresholds:
+🔹 Coherence signals
 
-  * Φ_low and Φ_high (percentile-based by default)
-    
-  * Detects dynamic regimes and events:
+Computes turn-by-turn coherence measures:
 
-  * **S** = stable
-  * **B** = breakdown
-  * **R** = repair
-* Extracts triadic units (S–B–R quanta) and supports breakdown–repair asymmetry analysis
-* Tracks participant trajectories:
+Ct_new — context-aware coherence
 
-  * Cᵢ (embedding-based individual coherence)
-  * state trajectories (continuous speaker lines)
-  * Adds an **IC–III geometric layer**:
+IC-IIa — sigma alignment coherence
 
-  * distance **dᵢ**
-  * curvature **κᵢ**
-  * informational time parameterization **τ(t)**
-  * Includes an **IC–III → IC–II bridge module**:
+Ct_old — adjacent-turn baseline
 
-  * semantic compactness **ρ(t)**
-  * structural stress driver **Dₜ**
-  * phenomenological coherence proxy **Ĉₜ**
-  * structural lag estimation **Δ***
+Automatically estimates emergent thresholds:
 
+Φ_low, Φ_high (percentile-based)
+
+Detects dynamic regimes:
+
+S (stable)
+
+B (breakdown)
+
+R (repair)
+
+Extracts minimal S–B–R triadic units and supports breakdown–repair asymmetry analysis.
+
+🔹 Invariant structural coherence (C_inv)
+
+Optionally computes C_inv, a structure-level coherence signal derived from rolling similarity graphs over recent turns.
+
+Ct measures semantic alignment.
+
+C_inv measures structural stability.
+
+C_inv is invariant under orthonormal transformations of normalized embedding spaces and reflects changes in the dialogue’s local semantic geometry rather than coordinate representation.
+
+🔹 Participant trajectories
+
+Cᵢ — individual embedding-based coherence
+
+Continuous speaker state trajectories
+
+🔹 IC–III geometric layer
+
+Models structural evolution of the dialogue:
+
+dᵢ — semantic displacement
+
+κᵢ — curvature
+
+τ(t) — informational time
+
+🔹 IC–III → IC–II bridge
+
+Structural–phenomenological coupling metrics:
+
+ρ(t) — semantic compactness
+
+Dₜ — structural stress
+
+Ĉₜ — coherence proxy
+
+Δ* — structural lag
 
 📁 Dataset format
 
@@ -81,9 +113,6 @@ TIE–Dialog supports exporting:
 * `tie_dialog_full_results.csv`
   Full per-turn table including coherence signals, regimes, rupture/repair markers, IC-II and IC-III metrics, and participant trajectories.
 
-* `tie_dialog_triadic_quanta.csv`
-  Extracted S–B–R triadic units (minimal breakdown–repair structures).
-
 * `tie_dialog_ic2_dynamics.csv`
   IC-II dynamics and transition metrics (e.g., residuals, asynchrony, normalized informational change).
 
@@ -95,6 +124,18 @@ TIE–Dialog supports exporting:
 
 * `tie_dialog_consultancy_report.pdf`
   A readable, narrative PDF report designed for interpretation and applied use cases.
+
+🎯 Intended Use Cases
+
+Conversation analysis research
+
+Computational linguistics experiments
+
+Team communication diagnostics
+
+Dialogue system evaluation
+
+Breakdown–repair asymmetry studies
 
 
 🔎 Representation modes
