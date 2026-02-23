@@ -1,6 +1,6 @@
 
 
- TIE–Dialog — 📈 Conversational Dynamics Lab 📉 (CNøde)
+## TIE–Dialog — 📈 Conversational Dynamics Lab 📉 (CNøde)
 
 ## 🌐 Live Demo (Hugging Face Spaces)
 
