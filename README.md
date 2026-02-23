@@ -7,7 +7,7 @@
 👉 **Run TIE–Dialog in your browser:**  
 (https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog)
 
-<img width="849" height="560" alt="newplot - 2026-02-14T151706 958" src="https://github.com/user-attachments/assets/2e48078b-533f-4149-ac64-bad2ecf57ed2" />
+<img width="849" height="560" alt="newplot - 2026-02-23T202009 710" src="https://github.com/user-attachments/assets/720ad64e-c886-48bd-9737-02501cb91fb7" />
 
 TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
 It models coherence as a dynamic signal (**Cₜ**) and supports the detection of **breakdown–repair dynamics (S–B–R)**, emergent coherence thresholds (**Φ**), participant-level trajectories (**Cᵢ**), and a geometric layer (**IC–III**) over an induced semantic trajectory.
