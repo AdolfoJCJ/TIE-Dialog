@@ -122,8 +122,6 @@ TIE–Dialog supports exporting:
 * `tie_dialog_main_plot.html`
   Interactive export of the main coherence plot.
 
-* `tie_dialog_consultancy_report.pdf`
-  A readable, narrative PDF report designed for interpretation and applied use cases.
 
 🎯 Intended Use Cases
 
