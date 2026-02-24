@@ -52,7 +52,7 @@ Extracts minimal S–B–R triadic units and supports breakdown–repair asymmet
 
 🔹 Invariant structural coherence (C_inv)
 
-Optionally computes C_inv, a structure-level coherence signal derived from rolling similarity graphs over recent turns.
+It also computes C_inv, a structure-level coherence signal derived from rolling similarity graphs over recent turns.
 
 Ct measures semantic alignment.
 
@@ -121,6 +121,9 @@ TIE–Dialog supports exporting:
 
 * `tie_dialog_main_plot.html`
   Interactive export of the main coherence plot.
+
+* `tie_dialog_report.pdf`
+  Full report of the metrics and plots.
 
 
 🎯 Intended Use Cases
