@@ -7,7 +7,8 @@
 👉 **Run TIE–Dialog in your browser:**  
 (https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog)
 
-<img width="960" height="540" alt="Presentación sin título" src="https://github.com/user-attachments/assets/0114552d-f338-44e4-86a0-05f558937871" />
+<img width="2500" height="1875" alt="Presentación sin título (1)" src="https://github.com/user-attachments/assets/2bdb0244-5b1d-49b3-bef4-09be5c9574dd" />
+
 
 
 TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
