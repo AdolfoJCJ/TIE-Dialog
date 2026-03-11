@@ -195,7 +195,17 @@ Full per-turn dataset including:
 * IC-III metrics
 * participant trajectories
 
+---
 
+tie_dialog_ic2_dynamics.csv
+
+IC-II coherence dynamics:
+
+resonance
+
+informational change
+
+Ct
 ---
 
 **tie_dialog_ic3_geometry.csv**
