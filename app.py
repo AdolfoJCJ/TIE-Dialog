@@ -3,6 +3,7 @@
 # (imports + labels + helpers + Public View + IC-II/IC-III core)
 # ============================
 
+import textwrap
 import streamlit as st
 st.set_page_config(page_title="Conversational Dynamics Lab — CNøde", layout="wide")
 
@@ -16,6 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages  # imported (ok if unused)
+from datetime import datetime
 
 # =========================================================
 # OPTIONAL LIBRARIES
@@ -99,7 +101,7 @@ def embed_texts(
 
         norms = np.linalg.norm(E, axis=1, keepdims=True) + 1e-9
         E = E / norms
-        return E, "onehot", "⚠️ TF-IDF unavailable → using one-hot fallback."
+        return E, "onehot", "⚠️ TF-IDF unavailable => using one-hot fallback."
 
     vectorizer = TfidfVectorizer()
     X = vectorizer.fit_transform(texts).astype(float)
@@ -144,10 +146,7 @@ LABELS: Dict[str, Dict[str, str]] = {
         "download_full_csv": "Download full results (CSV)",
         "download_ic2_csv": "Download IC–IIa dynamics (CSV)",
         "download_ic3_csv": "Download IC–III geometric layer (CSV)",
-        "ctx_header": "Context-aware coherence (Ct_new)",
         "debug_header": "Debug",
-        "show_ct_old": "Show Ct_old overlay in main plot",
-        "use_ct_old_for_events": "Use Ct_old for peak/valley events (debug)",
         "lang": "Language",
         "public_header": "Public View (Smoothed S–B–R)",
         "public_span": "Smoothing span (EWMA)",
@@ -193,8 +192,6 @@ LABELS: Dict[str, Dict[str, str]] = {
         "download_ic3_csv": "Descargar capa geométrica IC–III (CSV)",
         "ctx_header": "Coherencia context-aware (Ct_new)",
         "debug_header": "Debug",
-        "show_ct_old": "Mostrar Ct_old superpuesto en el plot principal",
-        "use_ct_old_for_events": "Usar Ct_old para eventos peak/valley (debug)",
         "lang": "Idioma",
         "public_header": "Vista pública (S–B–R suavizado)",
         "public_span": "Span de suavizado (EWMA)",
@@ -616,7 +613,7 @@ def plot_public_sbr(
         "W": dict(fillcolor="rgba(150,150,150,0.06)", line_width=0),
     }
     for lab, a, b in _segments_from_labels(labels):
-        fig.add_vrect(x0=int(turns[a]), x1=int(turns[b]), **band.get(lab, band["R"]))
+        fig.add_vrect(x0=int(turns[a]), x1=int(turns[b]) + 1, **band.get(lab, band["R"]))
 
     fig.add_trace(go.Scatter(
         x=turns, y=C_smooth, mode="lines", name="Cₜ (smoothed)",
@@ -665,113 +662,75 @@ def discrete_derivative(x: np.ndarray) -> np.ndarray:
 
 def compute_ic2_dynamics(
     E: np.ndarray,
-    alpha_context: float = 0.8,
-    theta0: float = 0.0,
-    theta1: float = 4.0,
-    theta2: float = 2.0,
-    window_W: int = 5,
-    delta_async: int = 0,
-    gamma_async: float = 1.0
+    alpha_context: float = 0.84,
+    beta: float = 0.70,
+    b: float = 0.40,
+    eps: float = 1e-12,
 ) -> dict:
+    """
+    Canonical IC-II:
+    I_m(t) = α I_m(t-1) + (1-α) E_{t-1}
+    r_t = cos(E_t, I_m(t))
+    ΔI_t = ||E_t - E_{t-1}||
+    C_t = σ( β r_t - (1-β) ΔI_t - b )
+    """
     E = np.asarray(E, float)
     n = E.shape[0]
     if n == 0:
-        return {
-            "I_s": E, "I_m": E,
-            "res": np.zeros(0, float),
-            "res_sync": np.zeros(0, float),
-            "d_res": np.zeros(0, float),
-            "C_t": np.zeros(0, float),
-            "E_t": np.zeros(0, float),
-            "I_W": np.zeros(0, float),
-            "Delta_async": np.zeros(0, float),
-            "dI_norm": np.zeros(0, float),
-        }
+        z = np.zeros(0, float)
+        return {"I_s": E, "I_m": E, "res": z, "dI_norm": z, "C_t": z}
 
+    # unit-normalize embeddings for stable cosine + geometry consistency
     I_s = E.copy()
+    norms = np.linalg.norm(I_s, axis=1, keepdims=True) + eps
+    I_s = I_s / norms
+
+    # context memory I_m
     I_m = np.zeros_like(I_s)
     I_m[0] = I_s[0]
-    alpha = float(np.clip(alpha_context, 0.0, 0.99))
+    a = float(np.clip(alpha_context, 0.0, 0.999))
     for t in range(1, n):
-        I_m[t] = alpha * I_m[t - 1] + (1.0 - alpha) * I_s[t - 1]
+        I_m[t] = a * I_m[t - 1] + (1.0 - a) * I_s[t - 1]
 
-    res_sync = np.zeros(n, float)
+    # resonance r_t
+    res = np.zeros(n, float)
     for t in range(n):
-        res_sync[t] = resonance_op(I_s[t], I_m[t])
+        res[t] = _cos(I_s[t], I_m[t], eps=eps)
 
-    d_steps = max(0, int(delta_async))
-    I_m_async = np.zeros_like(I_m)
-    for t in range(n):
-        j = t + d_steps
-        I_m_async[t] = I_m[j] if j < n else I_m[-1]
-
-    res_async = np.zeros(n, float)
-    for t in range(n):
-        res_async[t] = resonance_op(I_s[t], I_m_async[t])
-
-    dI_norm = np.zeros(n, float)
+    # local displacement ΔI_t
+    dI = np.zeros(n, float)
     for t in range(1, n):
-        dI_norm[t] = float(np.linalg.norm(I_s[t] - I_s[t - 1]))
+        dI[t] = float(np.linalg.norm(I_s[t] - I_s[t - 1]))
 
-    Delta_async = np.zeros(n, float)
-    for t in range(n):
-        Delta_async[t] = float(np.linalg.norm(I_s[t] - I_m_async[t]))
+    # IMPORTANT: scale ΔI into a comparable range (otherwise it can dominate)
+    # robust scaling by 95th percentile
+    s = float(np.quantile(dI[1:], 0.95)) if n > 2 else float(np.max(dI) + eps)
+    s = max(s, 1e-6)
+    dI_s = np.clip(dI / s, 0.0, 1.0)
 
-    arg = (
-        float(theta0)
-        + float(theta1) * res_async
-        - float(theta2) * dI_norm
-        - float(gamma_async) * Delta_async
-    )
-    C_t = _sigma(arg)
-    E_t = 1.0 - res_async
+    z = float(beta) * res - (1.0 - float(beta)) * dI_s - float(b)
+    C_t = _sigma(z)
 
-    w = max(1, int(window_W))
-    I_W = np.zeros(n, float)
-    for t in range(n):
-        start = max(0, t - w + 1)
-        I_W[t] = float(np.mean(res_async[start:t + 1]))
+    return {"I_s": I_s, "I_m": I_m, "res": res, "dI_norm": dI_s, "C_t": np.clip(C_t, 0.0, 1.0)}
 
-    d_res = discrete_derivative(res_async)
-
-    return {
-        "I_s": I_s,
-        "I_m": I_m,
-        "res": res_async,
-        "res_sync": res_sync,
-        "d_res": d_res,
-        "C_t": C_t,
-        "E_t": E_t,
-        "I_W": I_W,
-        "Delta_async": Delta_async,
-        "dI_norm": dI_norm,
-    }
-
-# -------------------------------
-# IC–III geometric layer
-# -------------------------------
 def compute_ic3_geometry(
     E: np.ndarray,
-    Ct: np.ndarray,
-    dI_norm: np.ndarray,
-    Delta_async: np.ndarray,
-    alpha_sem: float = 1.0,
-    beta_diff: float = 0.8,
-    gamma_async: float = 0.5,
-    delta_noise: float = 0.05,
-    lambda_k1: float = 1.0,
-    lambda_k2: float = 1.0,
-    lambda_k3: float = 1.0,
-    tau_w1: float = 0.7,
-    tau_w2: float = 1.0,
-    tau_w3: float = 0.8,
+    eps: float = 1e-12
 ) -> dict:
-    E = np.asarray(E, float)
-    Ct = np.asarray(Ct, float)
-    dI_norm = np.asarray(dI_norm, float)
-    Delta_async = np.asarray(Delta_async, float)
-    n = E.shape[0]
+    """
+    IC-III (intrinsic geometry): computed from the embedding trajectory.
 
+    Uses cosine-based local displacement instead of raw Euclidean step length.
+    This makes d_i more interpretable for dialogue, because it reflects
+    semantic deviation between consecutive turns without inflating normal variation.
+
+    Definitions:
+    - d_i(t): cosine-based local displacement in [0,1]
+    - kappa_i(t): local change in displacement (discrete curvature proxy)
+    - tau(t): cumulative deformation (arc-length proxy)
+    """
+    E = np.asarray(E, float)
+    n = E.shape[0]
     if n == 0:
         return {
             "d_i": np.zeros(0, float),
@@ -780,103 +739,111 @@ def compute_ic3_geometry(
             "tau_norm": np.zeros(0, float),
         }
 
-    one_minus_cos = np.zeros(n, float)
+    # unit-normalize embeddings
+    En = E.copy()
+    norms = np.linalg.norm(En, axis=1, keepdims=True) + eps
+    En = En / norms
+
+    # cosine-based local displacement
+    d_i = np.zeros(n, float)
     for t in range(1, n):
-        one_minus_cos[t] = 1.0 - _cos(E[t], E[t - 1])
+        cos_sim = float(np.dot(En[t], En[t - 1]))
+        cos_sim = np.clip(cos_sim, -1.0, 1.0)
 
-    d_i = (
-        float(alpha_sem) * one_minus_cos
-        + float(beta_diff) * dI_norm
-        + float(gamma_async) * Delta_async
-        + float(delta_noise)
-    )
+        # cosine distance rescaled to [0,1]
+        d_i[t] = 0.5 * (1.0 - cos_sim)
 
-    kappa_i = (
-        float(lambda_k1) * dI_norm
-        + float(lambda_k2) * Delta_async
-        + float(lambda_k3) * (1.0 - Ct)
-    )
+    # mild smoothing to reduce embedding jitter
+    d_i = _ema(d_i, alpha=0.35)
 
-    d_tau = (
-        float(tau_w1) * dI_norm
-        + float(tau_w2) * kappa_i
-        + float(tau_w3) * (1.0 - Ct)
-    )
-    tau_t = np.cumsum(d_tau)
+    # curvature proxy = local change in displacement
+    dd = np.zeros(n, float)
+    dd[1:] = d_i[1:] - d_i[:-1]
+    kappa_i = np.abs(dd)
 
+    # cumulative deformation / arc-length proxy
+    tau_t = np.cumsum(d_i)
+
+    # normalized tau
     if tau_t.size == 0:
         tau_norm = tau_t
     else:
         t_min = float(np.min(tau_t))
         t_max = float(np.max(tau_t))
-        if t_max - t_min < 1e-9:
-            tau_norm = np.zeros_like(tau_t)
-        else:
-            tau_norm = (tau_t - t_min) / (t_max - t_min)
+        tau_norm = np.zeros_like(tau_t) if (t_max - t_min < 1e-9) else (tau_t - t_min) / (t_max - t_min)
 
     return {
-        "d_i": d_i,
-        "kappa_i": kappa_i,
+        "d_i": np.clip(d_i, 0.0, 1.0),
+        "kappa_i": np.clip(kappa_i, 0.0, 1.0),
         "tau_t": tau_t,
         "tau_norm": tau_norm,
     }
 
-# -------------------------------
-# ✅ IC-III → IC-II module
-# -------------------------------
+# -------------------------------------------------
+# IC-II helper — Semantic Compactness ρ_t
+# -------------------------------------------------
 def semantic_compactness_rho(
-    embeddings: np.ndarray,
-    texts: List[str],
+    E: np.ndarray,
+    texts: list,
     w: int = 2,
     mode: str = "centroid",
     min_tokens: int = 3,
-    eps: float = 1e-12,
 ) -> np.ndarray:
-    E = np.asarray(embeddings, float)
-    n = E.shape[0]
+    """
+    Computes local semantic compactness ρ_t.
+    Measures how tightly clustered embeddings are in a rolling window.
+    Returns a signal in [0,1].
+    """
+    E = np.asarray(E, float)
+    n = int(E.shape[0]) if E.ndim == 2 else 0
     if n == 0:
-        return np.zeros(0, float)
+        return np.zeros((0,), float)
 
-    mode = (mode or "centroid").lower().strip()
-    w = int(max(1, w))
-
-    En = E.copy()
-    norms = np.linalg.norm(En, axis=1, keepdims=True) + eps
-    En = En / norms
+    # light token filter (optional)
+    tok_ok = np.ones(n, dtype=bool)
+    if texts is not None and min_tokens is not None and int(min_tokens) > 0:
+        for i, t in enumerate(texts[:n]):
+            s = t if isinstance(t, str) else ""
+            tok_ok[i] = (len(s.strip().split()) >= int(min_tokens))
 
     rho = np.zeros(n, float)
 
-    if mode == "variation":
-        sims_prev = np.zeros(n, float)
-        sims_next = np.zeros(n, float)
-        for t in range(n):
-            sims_prev[t] = _cos(En[t], En[t-1], eps=eps) if t - 1 >= 0 else 0.0
-            sims_next[t] = _cos(En[t], En[t+1], eps=eps) if t + 1 < n else 0.0
-        for t in range(n):
-            arr = np.array([sims_prev[t], sims_next[t]], float)
-            rho[t] = 1.0 - float(np.std(arr))
-    else:
-        for t in range(n):
-            a = max(0, t - w)
-            b = min(n, t + w + 1)
-            win = En[a:b]
-            if win.size == 0:
-                rho[t] = 0.0
-                continue
-            mu = np.mean(win, axis=0)
-            mu = mu / (float(np.linalg.norm(mu)) + eps)
-            dists = [1.0 - _cos(win[i], mu, eps=eps) for i in range(win.shape[0])]
-            rho[t] = 1.0 - float(np.mean(dists))
-
     for t in range(n):
-        txt = texts[t] if (t < len(texts) and isinstance(texts[t], str)) else ""
-        if len(txt.strip().split()) < int(min_tokens):
-            rho[t] *= 0.75
+        start = max(0, t - int(w))
+        end = min(n, t + int(w) + 1)
 
-    rho = _norm01(np.clip(rho, 0.0, 1.0))
-    return rho
+        idx = np.arange(start, end)
+        idx = idx[tok_ok[idx]]
+        if idx.size < 2:
+            rho[t] = 1.0
+            continue
 
+        window_vecs = E[idx]
+
+        if str(mode).lower().strip() == "pairwise":
+            dists = []
+            for i in range(len(window_vecs)):
+                for j in range(i + 1, len(window_vecs)):
+                    dists.append(float(np.linalg.norm(window_vecs[i] - window_vecs[j])))
+            mean_d = float(np.mean(dists)) if dists else 0.0
+            rho[t] = 1.0 / (1.0 + mean_d)
+        else:
+            centroid = window_vecs.mean(axis=0)
+            dists = np.linalg.norm(window_vecs - centroid, axis=1)
+            rho[t] = 1.0 / (1.0 + float(dists.mean()))
+
+    # normalize safely to [0,1]
+    mx = float(np.max(rho)) if rho.size else 1.0
+    if mx > 1e-12:
+        rho = rho / mx
+    return np.clip(rho, 0.0, 1.0)
+
+
+# -------------------------------------------------
+# IC-III → IC-II driver D_t
+# -------------------------------------------------
 def manifold_driver_D(
+    *,
     di: np.ndarray,
     kappa: np.ndarray,
     rho: np.ndarray,
@@ -885,216 +852,125 @@ def manifold_driver_D(
     w_r: float = 0.20,
     gating: bool = True,
 ) -> np.ndarray:
+    """
+    Combines IC-III channels into a driver D_t in [0,1].
+    Intuition: high displacement + high curvature + low compactness => high driver (reconfiguration pressure).
+    """
     di = np.asarray(di, float)
     kappa = np.asarray(kappa, float)
     rho = np.asarray(rho, float)
     n = min(di.size, kappa.size, rho.size)
     if n == 0:
-        return np.zeros(0, float)
+        return np.zeros((0,), float)
 
-    di = di[:n]; kappa = kappa[:n]; rho = rho[:n]
+    di = np.clip(di[:n], 0.0, 1.0)
+    kappa = np.clip(kappa[:n], 0.0, 1.0)
+    rho = np.clip(rho[:n], 0.0, 1.0)
 
-    wd = float(max(0.0, w_d))
-    wk = float(max(0.0, w_k))
-    wr = float(max(0.0, w_r))
-    s = wd + wk + wr
-    if s <= 1e-12:
-        wd, wk, wr = 1.0, 0.0, 0.0
-        s = 1.0
-    wd, wk, wr = wd/s, wk/s, wr/s
+    inv_rho = 1.0 - rho
 
-    di_eff = di.copy()
+    D = float(w_d) * di + float(w_k) * kappa + float(w_r) * inv_rho
+
     if gating:
-        thr = float(np.percentile(kappa, 60))
-        mask = kappa < thr
-        di_eff[mask] = 0.5 * di_eff[mask]
+        # if compactness is high, damp the driver slightly
+        gate = np.clip(0.40 + 0.60 * inv_rho, 0.0, 1.0)
+        D = D * gate
 
-    D = wd * di_eff + wk * kappa + wr * rho
-    D = _norm01(np.clip(D, 0.0, 1.0))
-    return D
+    return np.clip(D, 0.0, 1.0)
 
-def phenomenological_coherence_C_hat(
-    D: np.ndarray,
-    model: str = "ema",
-    alpha: float = 0.25,
-    K: int = 8,
-    lam: float = 2.5,
-    Ct_ref: Optional[np.ndarray] = None,
-) -> np.ndarray:
-    D = np.asarray(D, float)
-    n = D.size
-    if n == 0:
-        return np.zeros(0, float)
 
-    g = 1.0 - D
-
-    if Ct_ref is not None:
-        Ct_ref = np.asarray(Ct_ref, float)
-        if Ct_ref.size == n:
-            corr = _safe_corr(D, 1.0 - Ct_ref)
-            if np.isfinite(corr) and corr < 0:
-                g = 1.0 - g
-
-    model = (model or "ema").lower().strip()
-
-    if model == "kernel":
-        K = int(max(1, K))
-        lam = float(max(1e-6, lam))
-        weights = np.array([math.exp(-k / lam) for k in range(K + 1)], float)
-        weights = weights / (float(np.sum(weights)) + 1e-12)
-
-        out = np.zeros(n, float)
-        for t in range(n):
-            acc = 0.0
-            wsum = 0.0
-            for k in range(K + 1):
-                j = t - k
-                if j < 0:
-                    break
-                acc += weights[k] * float(g[j])
-                wsum += weights[k]
-            out[t] = acc / (wsum + 1e-12)
-        return np.clip(_norm01(out), 0.0, 1.0)
-
-    a = float(np.clip(alpha, 0.0, 0.999))
-    out = np.zeros(n, float)
-    out[0] = float(g[0])
-    for t in range(1, n):
-        out[t] = (1.0 - a) * out[t-1] + a * float(g[t])
-
-    out = np.clip(_norm01(out), 0.0, 1.0)
-    return out
-
+# -------------------------------------------------
+# Lag estimation Δ* between D_t and Ct
+# -------------------------------------------------
 def estimate_lag_delta(
+    *,
     D: np.ndarray,
     C: np.ndarray,
     phi_low: float,
     delta_max: int = 6,
-    smooth_alpha: float = 0.30
+    smooth_alpha: float = 0.30,
 ) -> Dict[str, float]:
+    """
+    Estimate lag Δ* by scanning correlations corr(D_{t-Δ}, 1-C_t) (or similar).
+    Returns dict with delta_star and score.
+    """
     D = np.asarray(D, float)
     C = np.asarray(C, float)
     n = min(D.size, C.size)
-    if n == 0:
-        return {"delta_star": 0.0, "score": float("nan"), "pearson": float("nan"), "spearman": float("nan")}
+    if n < 5:
+        return {"delta_star": 0.0, "score": float("nan")}
 
-    D = D[:n]
-    C = C[:n]
-    Y = (1.0 - C) * (C < phi_low).astype(float)
-
-    D_s = _ema(D, alpha=float(smooth_alpha))
-    Y_s = _ema(Y, alpha=float(smooth_alpha))
+    D0 = _ema(np.clip(D[:n], 0.0, 1.0), alpha=float(np.clip(smooth_alpha, 0.0, 0.999)))
+    R0 = 1.0 - np.clip(C[:n], 0.0, 1.0)  # rupture-ish proxy
 
     best_d = 0
-    best_score = -1e9
-    best_p = float("nan")
-    best_s = float("nan")
+    best_s = -1.0
 
-    for d in range(0, int(max(0, delta_max)) + 1):
+    for d in range(0, int(delta_max) + 1):
         if d == 0:
-            a = D_s
-            b = Y_s
+            a = D0
+            b = R0
         else:
-            a = D_s[:-d]
-            b = Y_s[d:]
-        if a.size < 3 or b.size < 3:
-            continue
-
-        pear = _safe_corr(a, b)
-        spea = float("nan")
-        try:
-            ra = pd.Series(a).rank().to_numpy()
-            rb = pd.Series(b).rank().to_numpy()
-            spea = _safe_corr(ra, rb)
-        except Exception:
-            spea = float("nan")
-
-        cand = np.nanmax([pear, spea])
-        if np.isfinite(cand) and cand > best_score:
-            best_score = float(cand)
+            a = D0[:-d]
+            b = R0[d:]
+        s = _safe_corr(a, b)
+        if np.isfinite(s) and s > best_s:
+            best_s = float(s)
             best_d = int(d)
-            best_p = float(pear) if np.isfinite(pear) else best_p
-            best_s = float(spea) if np.isfinite(spea) else best_s
 
-    return {
-        "delta_star": float(best_d),
-        "score": float(best_score) if best_score > -1e8 else float("nan"),
-        "pearson": float(best_p),
-        "spearman": float(best_s),
-    }
+    return {"delta_star": float(best_d), "score": float(best_s)}
 
+
+# -------------------------------------------------
+# Break detectors on driver / proxy channels
+# -------------------------------------------------
 def detect_geom_breaks(
+    *,
     D: np.ndarray,
     kappa: np.ndarray,
     D_hi: float = 0.70,
     dD_hi: float = 0.12,
-    refractory: int = 2
+    refractory: int = 2,
 ) -> List[int]:
     D = np.asarray(D, float)
     kappa = np.asarray(kappa, float)
     n = min(D.size, kappa.size)
     if n == 0:
         return []
-    D = D[:n]
-    kappa = kappa[:n]
 
-    dD = discrete_derivative(D)
-    kpeaks = set()
-    if _HAS_FIND_PEAKS and n >= 3:
-        try:
-            pk, _ = find_peaks(kappa, prominence=0.05, distance=2)
-            kpeaks = set([int(i) for i in pk])
-        except Exception:
-            kpeaks = set()
+    dD = np.zeros(n, float)
+    dD[1:] = D[1:] - D[:-1]
 
-    hits = []
+    out = []
     last = -10**9
     for t in range(n):
-        if (t - last) <= int(refractory):
+        if t - last < int(refractory):
             continue
-        cond1 = (float(D[t]) > float(D_hi))
-        cond2 = (float(dD[t]) > float(dD_hi)) or (t in kpeaks)
-        if cond1 and cond2:
-            hits.append(int(t))
+        if float(D[t]) >= float(D_hi) and float(dD[t]) >= float(dD_hi):
+            out.append(int(t))
             last = int(t)
-    return hits
-
-def detect_perceived_breaks(
-    C_hat: np.ndarray,
-    phi_low: float,
-    drop_hi: float = -0.15,
-    refractory: int = 2
-) -> List[int]:
-    C_hat = np.asarray(C_hat, float)
-    n = C_hat.size
-    if n == 0:
-        return []
-    hits = []
-    last = -10**9
-    for t in range(1, n):
-        if (t - last) <= int(refractory):
-            continue
-        cross = (C_hat[t-1] >= float(phi_low)) and (C_hat[t] < float(phi_low))
-        drop = (float(C_hat[t]) - float(C_hat[t-1])) < float(drop_hi)
-        if cross or drop:
-            hits.append(int(t))
-            last = int(t)
-    return hits
-
-def match_breaks(
-    geom_breaks: List[int],
-    perceived_breaks: List[int],
-    delta_max: int = 6
-) -> List[Dict[str, int]]:
-    out = []
-    perc = sorted([int(x) for x in perceived_breaks])
-    for t0 in sorted([int(x) for x in geom_breaks]):
-        window_end = int(t0 + int(delta_max) + 2)
-        cand = [t for t in perc if (t >= t0 and t <= window_end)]
-        if cand:
-            t1 = cand[0]
-            out.append({"geom_t": t0, "perc_t": t1, "lag": int(t1 - t0)})
     return out
+
+
+
+def match_breaks(a: List[int], b: List[int], delta_max: int = 6) -> List[Dict[str, int]]:
+    """
+    Match indices in a to nearest indices in b within ±delta_max.
+    Returns list of dicts with lag = b-a.
+    """
+    A = [int(x) for x in (a or [])]
+    B = [int(x) for x in (b or [])]
+    if not A or not B:
+        return []
+
+    out = []
+    for i in A:
+        cand = [(j, abs(j - i)) for j in B if abs(j - i) <= int(delta_max)]
+        if not cand:
+            continue
+        j = min(cand, key=lambda z: z[1])[0]
+        out.append({"a": int(i), "b": int(j), "lag": int(j - i)})
+    return out    
 
 # -------------------------------
 # IC-III geometry plot
@@ -1119,14 +995,19 @@ def plot_ic3_geometry(
         y = np.asarray(y, float)
         if y.size == 0:
             return y
-        y_min = float(np.min(y))
-        y_max = float(np.max(y))
-        if y_max - y_min < 1e-9:
+
+        lo = float(np.nanpercentile(y, 5))
+        hi = float(np.nanpercentile(y, 95))
+
+        if hi - lo < 1e-9:
             return np.zeros_like(y)
-        return (y - y_min) / (y_max - y_min)
+
+        z = (y - lo) / (hi - lo)
+        return np.clip(z, 0.0, 1.0)
 
     d_norm = _norm_series(d_i)
     kappa_norm = _norm_series(kappa_i)
+
     if tau_t.size == 0:
         tau_norm = tau_t
     else:
@@ -1184,38 +1065,6 @@ def _clean_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     df = df[df["turn"] > 0].sort_values("turn").reset_index(drop=True)
     return df, missing
 
-# -------------------------------
-# Legacy metrics (adjacent-turn Ct)
-# -------------------------------
-def compute_ct_series(E: np.ndarray,
-                      ema_alpha: float = 0.4,
-                      use_savgol: bool = False,
-                      sg_win: int = 5,
-                      sg_poly: int = 2) -> np.ndarray:
-    n = E.shape[0]
-    Ct = np.zeros(n, float)
-    if n == 0:
-        return Ct
-    Ct[0] = 0.0
-    for t in range(1, n):
-        Ct[t] = float(np.dot(E[t], E[t-1]) / ((np.linalg.norm(E[t]) + 1e-9) * (np.linalg.norm(E[t-1]) + 1e-9)))
-    Ct = 0.5 * (Ct + 1.0)
-    Ct = _ema(Ct, alpha=float(ema_alpha))
-    if use_savgol:
-        Ct = _savgol(Ct, int(sg_win), int(sg_poly))
-        Ct = np.clip(Ct, 0.0, 1.0)
-    return Ct
-
-def compute_ct_im(E: np.ndarray, ema_alpha: float = 0.4) -> np.ndarray:
-    n = E.shape[0]
-    if n == 0:
-        return np.zeros(0, float)
-    centroid = np.mean(E, axis=0)
-    centroid /= (np.linalg.norm(centroid) + 1e-9)
-    CtIm = np.array([float(np.dot(E[t], centroid) / ((np.linalg.norm(E[t]) + 1e-9))) for t in range(n)], float)
-    CtIm = 0.5 * (CtIm + 1.0)
-    CtIm = _ema(CtIm, alpha=float(ema_alpha))
-    return np.clip(CtIm, 0.0, 1.0)
 
 # -------------------------------
 # Potentiality metric ℘ₜ
@@ -1624,36 +1473,6 @@ def _sbr_fullname(s: str) -> str:
     return m.get(key.lower(), "stable")
 
 
-def _enforce_quanto_rule(states: List[str]) -> Tuple[List[str], List[dict]]:
-    fixed = [_sbr_fullname(s) for s in states]
-    corrections: List[dict] = []
-    i, n = 0, len(fixed)
-
-    while i < n:
-        if fixed[i] == "broken":
-            j = i + 1
-            saw_R = False
-            while j < n and fixed[j] != "stable":
-                if fixed[j] == "repair":
-                    saw_R = True
-                    break
-                j += 1
-
-            if j < n and fixed[j] == "stable" and not saw_R and (i + 1) < n:
-                fixed[i + 1] = "repair"
-                corrections.append(
-                    {"pos": int(i + 1), "reason": "Inserted mandatory REPAIR between BROKEN and STABLE"}
-                )
-                i = j
-            else:
-                i += 1
-        else:
-            i += 1
-
-    back = {"stable": "S", "broken": "B", "repair": "R"}
-    return [back.get(s, "S") for s in fixed], corrections
-
-
 def protect_conversation_ending(
     sbr: Sequence[str],
     Ct_level: Sequence[float],
@@ -1685,115 +1504,6 @@ def protect_conversation_ending(
 
     return sbr_out
 
-
-# -------------------------------
-# Context-aware coherence
-# -------------------------------
-def _safe_unit(v: np.ndarray, eps: float = 1e-12) -> np.ndarray:
-    v = np.asarray(v, float)
-    n = float(np.linalg.norm(v))
-    if n < eps:
-        return v * 0.0
-    return v / (n + eps)
-
-
-def _sigmoid_scalar(x: float) -> float:
-    # safe-ish scalar sigmoid
-    try:
-        return float(1.0 / (1.0 + math.exp(-float(x))))
-    except OverflowError:
-        return 0.0 if x < 0 else 1.0
-
-
-def compute_context_state_vector(
-    E: np.ndarray,
-    Ct_old: np.ndarray,
-    Phi: float,
-    alpha_min: float = 0.80,
-    alpha_max: float = 0.97,
-    k: float = 8.0,
-    eps: float = 1e-12,
-) -> Dict[str, np.ndarray]:
-    E = np.asarray(E, float)
-    Ct_old = np.asarray(Ct_old, float)
-    n = E.shape[0]
-
-    if n == 0:
-        d = int(E.shape[1]) if (E.ndim == 2 and E.shape[1] > 0) else 0
-        return {"c_t": np.zeros((0, d), float), "alpha_t": np.zeros(0, float)}
-
-    e = np.zeros_like(E, float)
-    for i in range(n):
-        e[i] = _safe_unit(E[i], eps=eps)
-
-    c = np.zeros_like(e, float)
-    a_t = np.zeros(n, float)
-
-    c[0] = e[0]
-    a_t[0] = float(alpha_max)
-
-    for t in range(1, n):
-        sig = _sigmoid_scalar(float(k) * (float(Ct_old[t]) - float(Phi)))
-        a = float(alpha_min) + (float(alpha_max) - float(alpha_min)) * float(sig)
-        a = float(np.clip(a, 0.0, 0.999))
-        a_t[t] = a
-
-        u = a * c[t - 1] + (1.0 - a) * e[t]
-        if float(np.linalg.norm(u)) < eps:
-            c[t] = c[t - 1]
-        else:
-            c[t] = _safe_unit(u, eps=eps)
-
-    return {"c_t": c, "alpha_t": a_t}
-
-
-def compute_context_metrics(
-    E: np.ndarray,
-    c_t: np.ndarray,
-    W: int = 7,
-    kappa: float = 1.2,
-    eps: float = 1e-12,
-) -> Dict[str, np.ndarray]:
-    E = np.asarray(E, float)
-    c_t = np.asarray(c_t, float)
-    n = E.shape[0]
-
-    if n == 0:
-        z = np.zeros(0, float)
-        return {"C_ctx": z, "D_ctx": z, "Delta_C_ctx": z, "Theta_ctx": z}
-
-    e = np.zeros_like(E, float)
-    for i in range(n):
-        e[i] = _safe_unit(E[i], eps=eps)
-
-    C_ctx = np.zeros(n, float)
-    D_ctx = np.zeros(n, float)
-    Delta_C_ctx = np.zeros(n, float)
-    Theta_ctx = np.zeros(n, float)
-
-    C_ctx[0] = 1.0
-    for t in range(1, n):
-        C_ctx[t] = 0.5 * (1.0 + _cos(e[t], c_t[t - 1], eps=eps))
-        C_ctx[t] = float(np.clip(C_ctx[t], 0.0, 1.0))
-        D_ctx[t] = 1.0 - C_ctx[t]
-        Delta_C_ctx[t] = C_ctx[t] - C_ctx[t - 1]
-
-        W_eff = int(min(int(W), t))
-        if W_eff <= 1:
-            Theta_ctx[t] = float(np.mean(D_ctx[:t]))
-        else:
-            start = max(0, t - W_eff)
-            window = D_ctx[start:t]
-            mu = float(np.mean(window))
-            sd = float(np.std(window))
-            Theta_ctx[t] = mu + float(kappa) * sd
-
-    return {
-        "C_ctx": np.clip(C_ctx, 0.0, 1.0),
-        "D_ctx": np.clip(D_ctx, 0.0, 1.0),
-        "Delta_C_ctx": Delta_C_ctx,
-        "Theta_ctx": Theta_ctx,
-    }
 
 
 # -------------------------------
@@ -1954,14 +1664,11 @@ def plot_ct_main(
     height: int,
     pilot_w: int = 2,
     potentiality: Optional[np.ndarray] = None,
-    Ct_old_overlay: Optional[np.ndarray] = None,
-    C_hat: Optional[np.ndarray] = None,
     C_inv: Optional[np.ndarray] = None, 
     geom_breaks_struct: Optional[List[int]] = None,
-    perceived_breaks: Optional[List[int]] = None,
     lag_label: Optional[str] = None,
-         sbr_labels: Optional[Sequence[str]] = None,  
-) -> go.Figure:
+    sbr_labels: Optional[Sequence[str]] = None,  
+    ) -> go.Figure:
     Ct = np.asarray(Ct, dtype=float)
     n = int(Ct.size)
     x = np.arange(1, n + 1, dtype=int)
@@ -1986,34 +1693,6 @@ def plot_ct_main(
     # -----------------------------
     # Optional overlays
     # -----------------------------
-    if C_hat is not None:
-        C_hat = np.asarray(C_hat, dtype=float)
-        if C_hat.size == n:
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=np.clip(C_hat, 0.0, 1.0),
-                    mode="lines",
-                    name="Cₜ_smooth",
-                    line=dict(width=2, dash="dash"),
-                    yaxis="y",
-                )
-            )
-
-    if Ct_old_overlay is not None:
-        Ct_old_overlay = np.asarray(Ct_old_overlay, dtype=float)
-        if Ct_old_overlay.size == n:
-            fig.add_trace(
-                go.Scatter(
-                    x=x,
-                    y=np.clip(Ct_old_overlay, 0.0, 1.0),
-                    mode="lines",
-                    name="Ct_old (debug)",
-                    line=dict(width=2, dash="dash"),
-                    yaxis="y",
-                )
-            )
-
     # ✅ C_inv overlay (graph invariants)
     if C_inv is not None:
         C_inv = np.asarray(C_inv, dtype=float)
@@ -2125,6 +1804,292 @@ def plot_ct_main(
 
     return _base_layout(fig, title, height=height)
 
+# =========================================================
+# PDF REPORT (Matplotlib + PdfPages) 
+# =========================================================
+
+def _fig_text_page(title: str, lines: List[str], footer: str = ""):
+    fig = plt.figure(figsize=(8.27, 11.69))  # A4 portrait
+    fig.patch.set_facecolor("white")
+
+    y = 0.92
+    fig.text(0.07, y, title, fontsize=18, fontweight="bold")
+    y -= 0.04
+    fig.text(0.07, y, "Generated by CNøde — TIE–Dialog (Conversational Dynamics Lab)", fontsize=10, alpha=0.8)
+    y -= 0.04
+
+    for ln in lines:
+        if ln.strip() == "":
+            y -= 0.02
+            continue
+        fig.text(0.07, y, ln, fontsize=11)
+        y -= 0.022
+        if y < 0.10:
+            break
+
+    if footer:
+        fig.text(0.07, 0.05, footer, fontsize=9, alpha=0.7)
+
+    plt.axis("off")
+    return fig
+
+
+def _fig_timeseries(
+    title: str,
+    x: np.ndarray,
+    series: List[Tuple[str, np.ndarray]],
+    hlines: Optional[List[Tuple[str, float]]] = None,
+    vmarks: Optional[List[Tuple[str, List[int]]]] = None,
+    ylim: Tuple[float, float] = (0.0, 1.0),
+):
+    fig = plt.figure(figsize=(11.69, 8.27))  # A4 landscape
+    ax = fig.add_subplot(111)
+    ax.set_title(title, fontsize=14, fontweight="bold")
+
+    for name, y in series:
+        y = np.asarray(y, float)
+        m = min(len(x), len(y))
+        ax.plot(x[:m], y[:m], linewidth=2, label=name)
+
+    if hlines:
+        for label, yv in hlines:
+            ax.axhline(float(yv), linestyle="--", linewidth=1)
+            ax.text(x[0], float(yv) + 0.01, label, fontsize=9)
+
+    if vmarks:
+        for label, idxs in vmarks:
+            for t in idxs:
+                xv = int(t) + 1  # 0-index -> turn
+                ax.axvline(xv, linestyle=":", linewidth=1, alpha=0.6)
+            if idxs:
+                ax.text(int(idxs[0]) + 1, 0.03, label, fontsize=9, alpha=0.9)
+
+    ax.set_xlabel("Turn")
+    ax.set_ylabel("Value (0–1)")
+    ax.set_ylim(float(ylim[0]), float(ylim[1]))
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="upper right", fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def _wrap_text_cell(text: str, width: int = 45) -> str:
+    if not isinstance(text, str):
+        return str(text)
+    return "\n".join(textwrap.wrap(text, width=width))
+
+
+def _fig_table_page(title: str, table_df: pd.DataFrame, note: str = ""):
+    fig = plt.figure(figsize=(11.69, 8.27))
+    ax = fig.add_subplot(111)
+    ax.set_title(title, fontsize=14, fontweight="bold")
+    ax.axis("off")
+
+    df_show = table_df.copy()
+
+    # --- WRAP TEXT COLUMN ---
+    if "text" in df_show.columns:
+        df_show["text"] = df_show["text"].apply(lambda x: _wrap_text_cell(x, width=55))
+
+    # Convert all to string
+    for c in df_show.columns:
+        df_show[c] = df_show[c].astype(str)
+
+    # Column widths (last column wider for text)
+    n_cols = len(df_show.columns)
+    col_widths = [0.08] * n_cols
+    if "text" in df_show.columns:
+        text_idx = list(df_show.columns).index("text")
+        col_widths[text_idx] = 0.45
+
+    tbl = ax.table(
+        cellText=df_show.values,
+        colLabels=df_show.columns,
+        loc="center",
+        cellLoc="left",
+        colLoc="left",
+        colWidths=col_widths,
+    )
+
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1, 1.5)
+
+    if note:
+        fig.text(0.02, 0.03, note, fontsize=9, alpha=0.75)
+
+    fig.tight_layout()
+    return fig
+
+def build_pdf_report_bytes(
+    *,
+    df_in: pd.DataFrame,
+    df_out: pd.DataFrame,
+    ic2_df: pd.DataFrame,
+    ic3_df: pd.DataFrame,
+    Ct_base: np.ndarray,
+    Ct_smooth: np.ndarray,
+    C_inv: Optional[np.ndarray],
+    phi_low: float,
+    phi_high: float,
+    valleys: List[int],
+    peaks: List[int],
+    geom_breaks_struct: List[int],
+    lag_label: str,
+    used_mode: str,
+    emb_msg: str,
+    params: Dict[str, object],
+) -> bytes:
+    """
+    Returns PDF bytes (downloadable).
+    valleys/peaks/geom/perceived are assumed 0-indexed.
+    """
+    buf = BytesIO()
+
+    n = int(len(Ct_base))
+    turns = np.arange(1, n + 1, dtype=int)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    def _safe_mean(x):
+        x = np.asarray(x, float)
+        x = x[np.isfinite(x)]
+        return float(np.mean(x)) if x.size else float("nan")
+
+    # ---------------------------
+    # PAGE 1 — Summary
+    # ---------------------------
+    summary_lines = [
+        f"Report time: {now}",
+        f"Embedding mode: {used_mode}",
+        f"Embedding status: {emb_msg}",
+        "",
+        f"Turns: {n}",
+        f"Participants: {df_in['participant'].nunique() if 'participant' in df_in.columns else 'n/a'}",
+        "",
+        f"Φ_low: {phi_low:.3f}",
+        f"Φ_high: {phi_high:.3f}",
+        f"Mean coherence (Ct): {_safe_mean(Ct_base):.3f}",
+        f"Mean smoothed coherence: {_safe_mean(Ct_smooth):.3f}",
+        "",
+        f"Detected breaks (valleys): {len(valleys)}",
+        f"Detected repairs (peaks): {len(peaks)}",
+        f"Structural breaks (geom): {len(geom_breaks_struct)}",
+        "",
+        f"{lag_label}",
+        "",
+        "Interpretation (high level):",
+        "• Ct captures alignment with the evolving conversational context.",
+        "• Valleys below Φ_low are rupture candidates; peaks above Φ_high are repair candidates.",
+        "• C_inv (if enabled) tracks structural reconfiguration via rolling graph invariants.",
+    ]
+
+    # ---------------------------
+    # PAGE 2 — Parameters
+    # ---------------------------
+    param_lines = ["Parameters used in this run:", ""]
+    for k, v in params.items():
+        param_lines.append(f"- {k}: {v}")
+
+    # ---------------------------
+    # Tables
+    # ---------------------------
+    dCt = np.zeros_like(np.asarray(Ct_base, float))
+    if len(dCt) > 1:
+        dCt[1:] = Ct_base[1:] - Ct_base[:-1]
+    idx_drop = np.argsort(dCt)[:10] if len(dCt) else np.array([], int)
+
+    cols = ["turn", "participant", "Ct", "dCt", "sbr", "rupture_type", "text"]
+    table_df = df_out.copy()
+    for c in cols:
+        if c not in table_df.columns:
+            table_df[c] = ""
+
+    top_df = table_df.iloc[idx_drop][cols].copy() if len(idx_drop) else table_df.head(0)[cols].copy()
+    if len(idx_drop):
+        top_df["dCt"] = [f"{float(dCt[i]):.3f}" for i in idx_drop]
+        top_df["Ct"] = [f"{float(Ct_base[i]):.3f}" for i in idx_drop]
+    if "text" in top_df.columns:
+        top_df["text"] = top_df["text"].astype(str).str.slice(0, 110)
+
+    events_rows = []
+    for v in valleys:
+        events_rows.append({"type": "B (valley)", "turn": int(v) + 1, "Ct": f"{float(Ct_base[int(v)]):.3f}"})
+    for p in peaks:
+        events_rows.append({"type": "R (peak)", "turn": int(p) + 1, "Ct": f"{float(Ct_base[int(p)]):.3f}"})
+    events_df = pd.DataFrame(events_rows) if events_rows else pd.DataFrame({"type": [], "turn": [], "Ct": []})
+    if not events_df.empty:
+        events_df = events_df.sort_values(["turn", "type"]).reset_index(drop=True)
+
+    # ---------------------------
+    # Write PDF
+    # ---------------------------
+    with PdfPages(buf) as pdf:
+        fig = _fig_text_page("TIE–Dialog Report (English)", summary_lines, footer="CNøde — Informational Systems Research")
+        pdf.savefig(fig); plt.close(fig)
+
+        fig = _fig_text_page("Run Configuration", param_lines, footer="Notes: Φ thresholds are percentiles unless overridden.")
+        pdf.savefig(fig); plt.close(fig)
+
+        # Main coherence page
+        main_series = [("Ct (raw)", Ct_base), ("Ct_smooth", Ct_smooth)]
+        hls = [("Φ_low", float(phi_low)), ("Φ_high", float(phi_high))]
+        marks = [("Break candidates", valleys), ("Repair candidates", peaks)]
+        fig = _fig_timeseries(
+            "Coherence Dynamics (Ct) with Break/Repair Events",
+            turns,
+            main_series,
+            hlines=hls,
+            vmarks=marks,
+            ylim=(0.0, 1.0),
+        )
+        pdf.savefig(fig); plt.close(fig)
+
+        # Optional C_inv page
+        if C_inv is not None and np.asarray(C_inv).size == len(Ct_base):
+            fig = _fig_timeseries(
+                "Invariant Coherence (C_inv) — Structural Reconfiguration Channel",
+                turns,
+                [("C_inv", np.asarray(C_inv, float))],
+                hlines=None,
+                vmarks=[("Geom breaks", geom_breaks_struct)],
+                ylim=(0.0, 1.0),
+            )
+            pdf.savefig(fig); plt.close(fig)
+
+        # IC-III page (uses ic3_df which you already create)
+        if ic3_df is not None and len(ic3_df) == len(turns):
+            fig = _fig_timeseries(
+                "IC–III / Driver Layer (normalized channels)",
+                turns,
+                [
+                    ("rho_t", np.asarray(ic3_df["rho_t"], float)),
+                    ("D_t", np.asarray(ic3_df["D_t"], float)),
+                    
+                ],
+                hlines=[("Φ_low", float(phi_low)), ("Φ_high", float(phi_high))],
+                vmarks=[],
+                ylim=(0.0, 1.0),
+            )
+            pdf.savefig(fig); plt.close(fig)
+
+        # Tables
+        fig = _fig_table_page(
+            "Top Ct Drop Candidates (most negative ΔCt)",
+            top_df,
+            note="Tip: these are the strongest local candidates for misalignment or rupture-like transitions.",
+        )
+        pdf.savefig(fig); plt.close(fig)
+
+        fig = _fig_table_page(
+            "Detected Events (Valleys/Peaks)",
+            events_df if not events_df.empty else pd.DataFrame({"type": ["(none)"], "turn": [""], "Ct": [""]}),
+            note="Valleys are break candidates; peaks are repair candidates (based on your event detector).",
+        )
+        pdf.savefig(fig); plt.close(fig)
+
+    buf.seek(0)
+    return buf.getvalue()
+
 # ============================
 # app.py — PART 3/3
 # (demo + Streamlit app main + downloads)
@@ -2209,34 +2174,33 @@ st.title(L["app_title"])
 st.caption(L["app_subtitle"])
 
 with st.expander(L["what_does"], expanded=False):
-    st.write(
-    """
-    This application analyzes dialogue as a dynamic informational system.
-    
-    It computes a turn-by-turn coherence signal (Cₜ) that captures how each 
-    contribution aligns with the evolving conversational context. Rather than 
-    treating coherence as a static score, the app models it as a continuous process 
-    that fluctuates over time.
+    st.markdown("""
+This application analyzes dialogue as a dynamic informational system.
 
-    The system detects three conversational regimes:
-    • Stable (S) – coherent continuation of the shared frame  
-    • Broken (B) – structural or semantic rupture  
-    • Repair (R) – re-alignment or recovery of coherence  
+It computes a turn-by-turn coherence signal (Ct) that captures how each contribution aligns with the evolving conversational context. Rather than treating coherence as a static score, the app models it as a continuous process that fluctuates over time.
 
-    In addition to semantic coherence, the app incorporates a geometric layer 
-    (IC–III) that measures structural properties of the dialogue field, including: 
-    • dᵢ – semantic displacement  
-    • κᵢ – structural curvature  
-    • τ – cumulative conversational deformation  
+In addition, the app can compute an invariant-based structural coherence channel (**C_inv**). While Ct tracks contextual/semantic alignment, **C_inv** tracks structural reconfiguration of the dialogue by measuring how the topology of a rolling similarity graph changes over time (via graph-invariant features). This helps distinguish:
 
-    The goal is to make conversational dynamics measurable, interpretable, 
-    and visually explorable.
-    """
-)
+- **Semantic drift** (Ct decreases while C_inv remains stable)
+- **Structural reframe** (Ct remains stable while C_inv decreases)
+- **Strong rupture** (Ct decreases and C_inv decreases)
 
-st.write(
-    "Expected columns: `turn`, `timestamp` (optional), `participant`, `text`."
-)
+The system detects three conversational regimes:
+
+- **Stable (S)** — coherent continuation of the shared frame  
+- **Broken (B)** — rupture candidate (semantic and/or structural)  
+- **Repair (R)** — re-alignment or recovery of coherence  
+
+Beyond coherence, the app incorporates a geometric layer (IC–III) that measures structural properties of the dialogue trajectory, including:
+
+- **d_i** — semantic displacement  
+- **kappa_i** — structural curvature  
+- **tau** — cumulative conversational deformation  
+
+The goal is to make conversational dynamics measurable, interpretable, and visually explorable.
+""")
+
+st.write("Expected columns: `turn`, `timestamp` (optional), `participant`, `text`.")
 
 # =========================
 # Mode: Canonical / Explore
@@ -2299,25 +2263,6 @@ st.sidebar.subheader(L["sem_repr"])
 emb_mode = ui_selectbox(L["emb_mode"], ["auto", "sbert", "tfidf"], index=0)
 sbert_model = ui_text_input(L["sbert_model"], value="sentence-transformers/all-MiniLM-L6-v2")
 
-# -------------------------
-# Coherence mode
-# -------------------------
-st.sidebar.subheader(L["coh_mode"])
-ct_mode = ui_selectbox(
-    L["coh_form"],
-    ["Ct_new (context-aware)", "IC-IIa (sigma alignment)", "Ct_old (adjacent-turn)"],
-    index=0
-)
-
-# -------------------------
-# Context-aware controls
-# (Canonical: fijas defaults y ocultas)
-# -------------------------
-st.sidebar.subheader(L["ctx_header"])
-ctx_lambda = ui_slider("λ mix (Ct_new = (1-λ)*Ct_old + λ*C_ctx)", 0.0, 1.0, 0.60, 0.05)
-alpha_min = ui_slider("alpha_min", 0.60, 0.95, 0.80, 0.01)
-alpha_max = ui_slider("alpha_max", 0.80, 0.99, 0.97, 0.01)
-k_sig = ui_slider("k (inertia slope)", 2.0, 16.0, 8.0, 0.5)
 
 # -------------------------
 # Φ thresholds
@@ -2332,6 +2277,7 @@ q_high = ui_slider("Φ_high percentile", 0.50, 0.95, 0.80, 0.01)
 st.sidebar.subheader(L["events"])
 sep_min = ui_slider("min separation (turns)", 1, 8, 2, 1)
 prom_min = ui_slider("min prominence", 0.01, 0.30, 0.05, 0.01)
+min_drop = ui_slider("min drop (Ct step)", 0.00, 0.60, 0.20, 0.01)
 merge_gap = ui_slider("merge_gap (micro-break grouping)", 1, 6, 2, 1)
 pilot_w = ui_slider("Pilot window half-width w (turns)", 0, 6, 2, 1)
 
@@ -2357,13 +2303,6 @@ state_alpha = ui_slider(L["state_alpha"], 0.60, 0.98, 0.88, 0.01)
 st.sidebar.subheader(L["public_header"])
 public_span = ui_slider(L["public_span"], 3, 25, 9, 1)
 public_show_thr = ui_checkbox(L["public_show_thresholds"], value=False)
-
-# -------------------------
-# Debug (Canonical: oculto pero devuelve defaults)
-# -------------------------
-st.sidebar.subheader(L["debug_header"])
-show_ct_old = ui_checkbox(L["show_ct_old"], value=False)
-use_ct_old_for_events = ui_checkbox(L["use_ct_old_for_events"], value=False)
 
 # -------------------------
 # Smoothed coherence
@@ -2423,46 +2362,30 @@ if C_inv is not None:
         seg_s = smooth_coherence(seg, method="ema", ema_alpha=0.18, ewma_span=9)
         C_inv_plot[a:b+1] = seg_s
 
-Ct_im = compute_ct_im(E, ema_alpha=0.40)
-Ct_im = _detrend_ct(Ct_im, alpha=0.020)
-Ct_im = _center_ct(Ct_im, target=0.62)
-Ct_im = _normalize_ct(Ct_im, lower=0.06, upper=0.94)
-Ct_im = apply_warmup_ramp(Ct_im, warm=WARMUP_TURNS, floor=0.10)
-
-Ct_old = compute_ct_series(E, ema_alpha=0.40, use_savgol=False)
-Ct_old = _detrend_ct(Ct_old, alpha=0.020)
-Ct_old = _center_ct(Ct_old, target=0.62)
-Ct_old = _normalize_ct(Ct_old, lower=0.06, upper=0.94)
-Ct_old = apply_warmup_ramp(Ct_old, warm=WARMUP_TURNS, floor=0.10)
-
 ic2 = compute_ic2_dynamics(
     E,
     alpha_context=0.84,
-    theta0=0.0, theta1=4.0, theta2=2.0,
-    window_W=5, delta_async=0, gamma_async=0.55
+    beta=0.70,
+    b=0.40,
 )
+
+# 1) raw (sigmoid output)
+Ct_raw = np.asarray(ic2["C_t"], float)
+Ct_raw = np.clip(Ct_raw, 0.0, 1.0)
+
+# 2) your canonical post-processing (this is what you WANT to plot/use)
+Ct_ic2 = _normalize_ct(Ct_raw, lower=0.06, upper=0.94)
+Ct_ic2 = apply_warmup_ramp(Ct_ic2, warm=WARMUP_TURNS, floor=0.10)
+
+# 3) choose what Ct_base means in your app
+Ct_base = Ct_ic2 
+
+Ct_im = 0.5 * (1.0 + np.asarray(ic2["res"], float))
+Ct_im = np.clip(Ct_im, 0.0, 1.0)
+
 Ct_ic2 = np.clip(ic2["C_t"], 0.0, 1.0)
 Ct_ic2 = _normalize_ct(Ct_ic2, lower=0.06, upper=0.94)
 Ct_ic2 = apply_warmup_ramp(Ct_ic2, warm=WARMUP_TURNS, floor=0.10)
-
-Phi_seed = float(np.quantile(Ct_old, 0.70)) if len(Ct_old) else 0.60
-ctx = compute_context_state_vector(
-    E=E, Ct_old=Ct_old, Phi=Phi_seed,
-    alpha_min=alpha_min, alpha_max=alpha_max, k=k_sig
-)
-ctx_m = compute_context_metrics(E=E, c_t=ctx["c_t"], W=7, kappa=1.2)
-C_ctx = np.clip(ctx_m["C_ctx"], 0.0, 1.0)
-
-Ct_new = (1.0 - float(ctx_lambda)) * Ct_old + float(ctx_lambda) * C_ctx
-Ct_new = _normalize_ct(Ct_new, lower=0.06, upper=0.94)
-Ct_new = apply_warmup_ramp(Ct_new, warm=WARMUP_TURNS, floor=0.10)
-
-if ct_mode.startswith("Ct_old"):
-    Ct_base = Ct_old.copy()
-elif ct_mode.startswith("IC-IIa"):
-    Ct_base = Ct_ic2.copy()
-else:
-    Ct_base = Ct_new.copy()
 
 Ct_smooth = smooth_coherence(
     Ct_base,
@@ -2472,17 +2395,29 @@ Ct_smooth = smooth_coherence(
 )
 Ct_smooth = np.clip(Ct_smooth, 0.0, 1.0)
 
-phi_low_eff  = float(np.quantile(Ct_base, float(q_low)))  if len(Ct_base) else 0.55
-phi_high_eff = float(np.quantile(Ct_base, float(q_high))) if len(Ct_base) else 0.75
+# -------------------------
+# Φ thresholds (exclude warmup)
+# -------------------------
+if len(Ct_base):
+    idx = np.arange(len(Ct_base))
+    mask_valid = idx >= int(WARMUP_TURNS)
+    Ct_for_phi = Ct_base[mask_valid] if np.any(mask_valid) else Ct_base
+
+    phi_low_eff  = float(np.quantile(Ct_for_phi, float(q_low)))
+    phi_high_eff = float(np.quantile(Ct_for_phi, float(q_high)))
+else:
+    phi_low_eff, phi_high_eff = 0.55, 0.75
 
 phi_low_eff  = float(np.clip(phi_low_eff,  0.0, 0.95))
 phi_high_eff = float(np.clip(phi_high_eff, 0.05, 1.0))
-
 if phi_high_eff <= phi_low_eff + 0.08:
     phi_high_eff = float(min(1.0, phi_low_eff + 0.12))
+
 P_t = compute_potentiality(texts)
 
-Ct_for_events = Ct_old if use_ct_old_for_events else Ct_base
+Ct_for_events = Ct_base.copy()
+Ct_for_events[:WARMUP_TURNS] = np.nan  # ignore warmup turns for peak finding
+
 valleys, peaks = detect_events(
     Ct_for_events,
     phi_low=phi_low_eff,
@@ -2490,9 +2425,34 @@ valleys, peaks = detect_events(
     sep_min=sep_min,
     prom_min=prom_min
 )
+
+# -------------------------
+# Extra filter: require a minimum local drop into the valley
+# (reduces micro-valleys and makes breaks more "event-like")
+# -------------------------
+min_drop_eff = float(min_drop)
+valleys_f = []
+for v in valleys:
+    v = int(v)
+    if v <= 0:
+        continue
+    drop = float(Ct_for_events[v - 1]) - float(Ct_for_events[v])
+    if drop >= min_drop_eff:
+        valleys_f.append(v)
+
+valleys = valleys_f
 valleys = merge_consecutive(valleys, gap=merge_gap)
 
-sbr = assign_sbr(
+# peaks can stay as-is; they are tied to valleys in your detector
+
+# --- 1) sanitize thresholds FIRST ---
+phi_low_eff  = float(np.clip(phi_low_eff,  0.0, 0.95))
+phi_high_eff = float(np.clip(phi_high_eff, 0.05, 1.0))
+if phi_high_eff <= phi_low_eff + 0.08:
+    phi_high_eff = float(min(1.0, phi_low_eff + 0.12))
+
+# --- 2) compute SBR directly (no mandatory repair rule) ---
+sbr_fixed = assign_sbr(
     Ct_base,
     valleys=valleys,
     peaks=peaks,
@@ -2500,7 +2460,8 @@ sbr = assign_sbr(
     phi_high=phi_high_eff,
     warmup_turns=WARMUP_TURNS
 )
-sbr_fixed, sbr_corrections = _enforce_quanto_rule(sbr)
+
+# --- 3) optional: end-protection only (keeps endings from looking artificially broken) ---
 sbr_fixed = protect_conversation_ending(
     sbr_fixed,
     Ct_level=Ct_base,
@@ -2510,10 +2471,8 @@ sbr_fixed = protect_conversation_ending(
     stable_threshold=0.35,
 )
 
-phi_low_eff = float(np.clip(phi_low_eff, 0.0, 0.95))
-phi_high_eff = float(np.clip(phi_high_eff, 0.05, 1.0))
-if phi_high_eff <= phi_low_eff + 0.08:
-    phi_high_eff = float(min(1.0, phi_low_eff + 0.12))
+# --- 4) optional: keep for UI/debug compatibility ---
+sbr_corrections = []
 
 # =========================
 # 3) Mini stability panel (quick scan)
@@ -2636,7 +2595,7 @@ def compute_cheatsheet(Ct: np.ndarray, Cinv: Optional[np.ndarray]):
     dCt = np.zeros_like(Ct)
     dCt[1:] = Ct[1:] - Ct[:-1]
 
-    # "Ct↓" means a big negative step compared to typical drops
+    # "Ct decreases" means a big negative step compared to typical drops
     drop_thr = _nanquantile(dCt, 0.10)  # 10th percentile of step changes (more negative = bigger drop)
     stable_thr = _nanquantile(np.abs(dCt), 0.60)  # typical absolute change
 
@@ -2650,7 +2609,7 @@ def compute_cheatsheet(Ct: np.ndarray, Cinv: Optional[np.ndarray]):
         Cinv = np.asarray(Cinv, float)
         dCi = np.zeros_like(Cinv)
         dCi[1:] = Cinv[1:] - Cinv[:-1]
-        # "C_inv↓" threshold
+        # "C_inv decreases" threshold
         drop_inv_thr = _nanquantile(dCi, 0.10)
         stable_inv_thr = _nanquantile(np.abs(dCi), 0.60)
         out.update({
@@ -2680,32 +2639,36 @@ def interpret_turn(t: int, Ct: np.ndarray, Cinv: Optional[np.ndarray], cs: dict)
     Ci_flat = (abs(dCi) <= float(cs["stable_inv_thr"]))
 
     if Ct_down and Ci_down:
-        return "RUPTURE_STRONG (Ct↓ and C_inv↓)"
+        return "RUPTURE_STRONG (Ct decreases and C_inv decreases)"
     if Ct_down and (Ci_flat or not Ci_down):
-        return "RUPTURE_SEM (Ct↓, C_inv≈)"
+        return "RUPTURE_SEM (Ct decreases, C_inv~)"
     if Ct_flat and Ci_down:
-        return "RUPTURE_STRUCT (Ct≈, C_inv↓)"
+        return "RUPTURE_STRUCT (Ct~, C_inv decreases)"
     return "STABLE / smooth evolution"
 
 # --- UI block ---
 cheat = compute_cheatsheet(Ct_base, C_inv)
 
 with st.expander("Interpretation cheatsheet", expanded=True):
-    st.markdown(
-        """
+    st.markdown("""
 **Rules of thumb (auto):**
-- **Ct↓ and C_inv↓ → strong rupture** (semantic + structural reconfiguration)
-- **Ct↓ and C_inv≈ → semantic drift** (topic/meaning shift, structure stable)
-- **Ct≈ and C_inv↓ → structural reframe** (organization changes, meaning locally stable)
-"""
-    )
+- **Ct decreases and C_inv decreases => strong rupture** (semantic + structural reconfiguration)
+- **Ct decreases and C_inv ~ stable => semantic drift** (topic/meaning shift, structure stable)
+- **Ct ~ stable and C_inv decreases => structural reframe** (organization changes, meaning locally stable)
+""")
+
     if cheat["has_cinv"]:
-        st.caption(f"Auto thresholds: Ct drop ≤ {cheat['drop_thr']:.3f} | C_inv drop ≤ {cheat['drop_inv_thr']:.3f}")
+        st.caption(
+            f"Auto thresholds: Ct drop <= {cheat['drop_thr']:.3f} | "
+            f"C_inv drop <= {cheat['drop_inv_thr']:.3f}"
+        )
     else:
-        st.caption(f"Auto thresholds: Ct drop ≤ {cheat['drop_thr']:.3f} (C_inv disabled)")
+        st.caption(f"Auto thresholds: Ct drop <= {cheat['drop_thr']:.3f} (C_inv disabled)")
 
     # show top candidates (biggest drops)
-    dCt = np.zeros_like(Ct_base, float); dCt[1:] = Ct_base[1:] - Ct_base[:-1]
+    dCt = np.zeros_like(Ct_base, float)
+    dCt[1:] = Ct_base[1:] - Ct_base[:-1]
+
     top_ct = np.argsort(dCt)[:5]  # most negative
     rows = []
     for idx in top_ct:
@@ -2715,54 +2678,40 @@ with st.expander("Interpretation cheatsheet", expanded=True):
             "dCt": float(dCt[idx]),
             "label": lab
         })
+
     st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 # ============================
-# IC-III → IC-II (driver/lag)
+# IC-III => IC-II (driver/lag)
 # ============================
-ic3 = compute_ic3_geometry(
-    E=E,
-    Ct=Ct_base,
-    dI_norm=np.asarray(ic2["dI_norm"], float),
-    Delta_async=np.asarray(ic2["Delta_async"], float),
-    alpha_sem=1.0,
-    beta_diff=0.8,
-    gamma_async=0.5,
-    delta_noise=0.05,
-)
+ic3 = compute_ic3_geometry(E=E)
 
 rho_t = semantic_compactness_rho(E, texts, w=2, mode="centroid", min_tokens=3)
 di_n = _norm01(ic3["d_i"])
 kappa_n = _norm01(ic3["kappa_i"])
 
 D_t = manifold_driver_D(di=di_n, kappa=kappa_n, rho=rho_t, w_d=0.45, w_k=0.35, w_r=0.20, gating=True)
-C_hat_t = phenomenological_coherence_C_hat(D_t, model="ema", alpha=0.25, Ct_ref=Ct_base)
 
 lag_info = estimate_lag_delta(D=D_t, C=Ct_base, phi_low=phi_low_eff, delta_max=6, smooth_alpha=0.30)
 delta_star = int(round(float(lag_info.get("delta_star", 0.0)))) if np.isfinite(lag_info.get("delta_star", np.nan)) else 0
 lag_score = lag_info.get("score", float("nan"))
 
 geom_breaks_struct = detect_geom_breaks(D=D_t, kappa=kappa_n, D_hi=0.70, dD_hi=0.12, refractory=2)
-perceived_breaks = detect_perceived_breaks(C_hat=C_hat_t, phi_low=phi_low_eff, drop_hi=-0.15, refractory=2)
 
-matches = match_breaks(geom_breaks_struct, perceived_breaks, delta_max=6)
-observed_lags = [m["lag"] for m in matches] if matches else []
-observed_lag_mean = float(np.mean(observed_lags)) if observed_lags else float("nan")
+observed_lag_mean = np.nan
 
 lag_label = f"Estimated structural lag Δ* = {delta_star} turns (corr = {('n/a' if not np.isfinite(lag_score) else f'{lag_score:.3f}')})"
 
 df_out = df.copy()
 df_out["Ct"] = Ct_base
-df_out["Ct_old"] = Ct_old
 df_out["Ct_im"] = Ct_im
 df_out["P_t"] = P_t
 df_out["sbr"] = sbr_fixed
 df_out["rho_t"] = rho_t
 df_out["D_t"] = D_t
-df_out["C_hat_t"] = C_hat_t
 df_out["delta_star"] = float(delta_star)
 df_out["geom_break_struct"] = np.isin(np.arange(len(df_out)), np.array(geom_breaks_struct, int)).astype(int)
-df_out["perceived_break"] = np.isin(np.arange(len(df_out)), np.array(perceived_breaks, int)).astype(int)
+df_out["perceived_break"] = 0
 df_out["observed_lag_mean"] = float(observed_lag_mean) if np.isfinite(observed_lag_mean) else np.nan
 
 if C_inv is not None and np.asarray(C_inv).size == len(df_out):
@@ -2820,8 +2769,6 @@ fig_main = plot_ct_main(
     height=560,
     potentiality=P_t,
     pilot_w=int(pilot_w),
-    Ct_old_overlay=(Ct_old if show_ct_old else None),
-    C_hat=(Ct_smooth if overlay_smoothed_on_main else None),
     C_inv=(C_inv if (overlay_cinv_on_main and C_inv is not None) else None),
     lag_label=lag_label,
          sbr_labels=sbr_fixed,  
@@ -2955,13 +2902,8 @@ def _df_to_csv_bytes(d: pd.DataFrame) -> bytes:
 ic2_df = pd.DataFrame({
     "turn": turns,
     "res": np.asarray(ic2["res"], float),
-    "res_sync": np.asarray(ic2["res_sync"], float),
-    "d_res": np.asarray(ic2["d_res"], float),
-    "C_t": np.asarray(ic2["C_t"], float),
-    "E_t": np.asarray(ic2["E_t"], float),
-    "I_W": np.asarray(ic2["I_W"], float),
-    "Delta_async": np.asarray(ic2["Delta_async"], float),
     "dI_norm": np.asarray(ic2["dI_norm"], float),
+    "Ct": np.asarray(ic2["C_t"], float),
 })
 
 ic3_df = pd.DataFrame({
@@ -2972,10 +2914,65 @@ ic3_df = pd.DataFrame({
     "tau_norm": np.asarray(ic3["tau_norm"], float),
     "rho_t": np.asarray(rho_t, float),
     "D_t": np.asarray(D_t, float),
-    "C_hat_t": np.asarray(C_hat_t, float),
     "delta_star": float(delta_star),
     "lag_score": float(lag_score) if np.isfinite(lag_score) else np.nan,
 })
+
+# =========================
+# PDF Report (English) — Download
+# =========================
+st.subheader("Report (PDF)")
+
+report_params = {
+    "mode": mode,
+    "emb_mode": emb_mode,
+    "sbert_model": sbert_model,
+    "q_low": float(q_low),
+    "q_high": float(q_high),
+    "sep_min": int(sep_min),
+    "prom_min": float(prom_min),
+    "merge_gap": int(merge_gap),
+    "pilot_w": int(pilot_w),
+    "smooth_method": smooth_method,
+    "env_alpha": float(env_alpha),
+    "env_span": int(env_span),
+    "use_cinv": bool(use_cinv),
+    "cinv_window": int(cinv_window),
+    "cinv_knn": int(cinv_knn),
+    "cinv_thr": float(cinv_thr),
+    "cinv_keigs": int(cinv_keigs),
+    "ci_method": ci_method,
+    "ci_alpha": float(ci_alpha),
+    "state_alpha": float(state_alpha),
+    "public_span": int(public_span),
+}
+
+pdf_bytes = build_pdf_report_bytes(
+    df_in=df,
+    df_out=df_out,
+    ic2_df=ic2_df,
+    ic3_df=ic3_df,
+    Ct_base=Ct_base,
+    Ct_smooth=Ct_smooth,
+    C_inv=(C_inv if (use_cinv and C_inv is not None) else None),
+    phi_low=float(phi_low_eff),
+    phi_high=float(phi_high_eff),
+    valleys=valleys,
+    peaks=peaks,
+    geom_breaks_struct=geom_breaks_struct,
+    lag_label=lag_label,
+    used_mode=used_mode,
+    emb_msg=emb_msg,
+    params=report_params,
+)
+
+st.download_button(
+    label="Download report (PDF)",
+    data=pdf_bytes,
+    file_name="tie_dialog_report.pdf",
+    mime="application/pdf",
+)
+st.caption("This PDF includes summary, parameters, key plots, and event tables (English).")
 
 st.subheader("Downloads")
 cA, cC, cD = st.columns(3)
