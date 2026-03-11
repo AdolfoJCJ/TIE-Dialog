@@ -93,8 +93,6 @@ This allows distinguishing different rupture types:
 | Ct ↓, C_inv ~ | semantic drift                         |
 | Ct ~, C_inv ↓ | structural reframe                     |
 
-Because it is based on graph invariants, **C_inv is invariant under orthonormal transformations of embedding spaces**.
-
 ---
 
 # 🔹 Participant trajectories
