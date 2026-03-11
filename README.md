@@ -219,7 +219,6 @@ IC-III structural metrics:
 * τ
 * ρ
 * Dₜ
-* Ĉₜ
 
 ---
 
