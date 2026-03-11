@@ -22,30 +22,6 @@ pip install -r requirements.txt
 streamlit run app.py
 
 
-Tu README ya está bastante bien, pero **no refleja exactamente la versión actual de la app**. Hay varias cosas nuevas en tu código que no aparecen o están descritas de forma antigua:
-
-Principales desajustes:
-
-1. `Ct_new / Ct_old` ya **no aparecen como señales principales** en el código actual.
-2. Ahora el pipeline real es:
-
-   * **IC-II → Ct**
-   * **C_inv (graph invariants)**
-   * **IC-III geometry**
-   * **IC-III → IC-II bridge**
-3. Añadiste:
-
-   * **phenomenological coherence proxy (Ĉ_t)**
-   * **structural lag estimation Δ***
-   * **automatic rupture typing (Ct vs C_inv quadrants)**
-   * **stability scan**
-   * **PDF report**
-4. El README tampoco explica bien **la interpretación Ct vs C_inv**, que es una de las partes más fuertes de tu app.
-
-Te dejo una **versión corregida y alineada con el código actual** que puedes pegar directamente en GitHub.
-
----
-
 # 🧩 What does TIE–Dialog do?
 
 **TIE–Dialog** models dialogue as a **time-evolving informational system** and provides complementary analyses of conversational dynamics at three levels:
@@ -104,14 +80,14 @@ The graph structure is summarized through **spectral invariants of the normalize
 
 Interpretation:
 
-| Signal | Meaning                              |
+| Signal |           Meaning                    |
 | ------ | ------------------------------------ |
 | Ct     | semantic/contextual alignment        |
 | C_inv  | structural stability of the dialogue |
 
 This allows distinguishing different rupture types:
 
-| Pattern       | Interpretation                         |
+| Pattern       |       Interpretation                   |
 | ------------- | -------------------------------------- |
 | Ct ↓, C_inv ↓ | strong rupture (semantic + structural) |
 | Ct ↓, C_inv ~ | semantic drift                         |
@@ -166,7 +142,6 @@ Derived signals include:
 
 * **ρ(t)** — semantic compactness
 * **Dₜ** — structural stress
-* **Ĉₜ** — phenomenological coherence proxy
 * **Δ*** — estimated structural lag between geometry and coherence
 
 These metrics help study **how structural changes precede or follow coherence shifts**.
@@ -318,9 +293,3 @@ CITATION.cff
 
 You may also cite the corresponding **software releases and preprints** hosted on Zenodo and ResearchGate.
 
----
-
-💡 Mi recomendación fuerte: añade también al README **una imagen del main plot** de tu app.
-Los repositorios de herramientas científicas **ganan muchísimo cuando el lector ve el output inmediatamente**.
-
-Si quieres, también puedo pasarte **la versión del README que usaría un paper o proyecto académico**, que suena todavía más sólido para comités.
