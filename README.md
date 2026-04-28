@@ -117,7 +117,6 @@ The conversation is also modeled as a **trajectory in embedding space**.
 
 * **dᵢ** — semantic displacement (cosine-based)
 * **κᵢ** — curvature (trajectory change)
-* **τ(t)** — cumulative deformation
 
 These capture **how the dialogue moves**, not just what it means.
 
@@ -234,7 +233,7 @@ Includes:
 * Cₜ, C_inv
 * S/B/R regimes
 * rupture classifications
-* IC–III metrics (dᵢ, κᵢ, τ)
+* IC–III metrics (dᵢ, κᵢ)
 * ρₜ, Dₜ
 * participant trajectories (Cᵢ)
 * ℘ₜ (potentiality)
