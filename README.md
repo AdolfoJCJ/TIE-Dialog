@@ -9,168 +9,208 @@
 
 <img width="2500" height="1875" alt="Presentación sin título (1)" src="https://github.com/user-attachments/assets/2bdb0244-5b1d-49b3-bef4-09be5c9574dd" />
 
+# TIE–Dialog
 
+**Turn-by-turn Conversational Coherence Analysis**
 
-TIE–Dialog is a Streamlit-based research tool for **turn-by-turn conversational coherence analysis**.
-It models coherence as a dynamic signal (**Cₜ**) and supports the detection of **breakdown–repair dynamics (S–B–R)**, emergent coherence thresholds (**Φ**), participant-level trajectories (**Cᵢ**), and a geometric layer (**IC–III**) over an induced semantic trajectory.
+TIE–Dialog is a **Streamlit-based research tool** for analyzing conversational coherence as a **dynamic informational signal evolving over time**.
 
-> **Important note:** TIE–Dialog is inspired by the Theory of Informational Emergence (TIE), but the software itself is **theory-agnostic**. It makes no ontological assumptions and operates purely on measurable conversational structure.
+It models dialogue as a structured process where coherence is **maintained, disrupted, and reorganized**, enabling the detection of:
 
+* breakdown–repair dynamics (S–B–R)
+* emergent coherence thresholds (Φ)
+* structural and geometric transitions
+* participant-level trajectories
 
-🚀 Quickstart
+> **Important:**
+> TIE–Dialog is inspired by the Theory of Informational Emergence (TIE), but the software itself is **theory-agnostic**.
+> It operates purely on **measurable conversational structure**, without ontological assumptions.
 
-bash
+---
+
+## 🚀 Quickstart
+
+```bash
 pip install -r requirements.txt
 streamlit run app.py
-
-
-# 🧩 What does TIE–Dialog do?
-
-**TIE–Dialog** models dialogue as a **time-evolving informational system** and provides complementary analyses of conversational dynamics at three levels:
-
-* semantic coherence
-* structural stability
-* geometric evolution
-
-The framework combines **IC-II (informational coherence dynamics)** and **IC-III (geometric structure of dialogue trajectories)**.
+```
 
 ---
 
-# 🔹 Coherence dynamics (IC-II)
+## 🧩 What does TIE–Dialog do?
 
-The system computes a **turn-by-turn coherence signal**:
+TIE–Dialog models dialogue as a **time-evolving informational system** and analyzes it across three coupled layers:
 
-**Ct — contextual coherence**
+* **IC–II:** Coherence dynamics
+* **C_inv:** Structural invariants
+* **IC–III:** Geometric trajectory
 
-Ct models how each turn aligns with the evolving conversational context using the IC-II formulation.
-
-From this signal the system automatically derives **emergent coherence thresholds**:
-
-* **Φ_low** — lower coherence boundary
-* **Φ_high** — upper coherence boundary
-
-These thresholds are estimated from the empirical Ct distribution.
+These layers interact to explain **how conversations evolve structurally and semantically**.
 
 ---
 
-## Conversational regimes
+## 🔹 Coherence Dynamics (IC–II)
 
-Using Ct and the detected events, TIE–Dialog identifies three regimes:
+### Cₜ — contextual coherence
 
-* **S — Stable**
-  Coherent continuation of the current conversational frame.
+Cₜ is not just similarity. It is computed as an **identity-over-trajectory signal**:
 
-* **B — Break**
-  Rupture candidate (loss of alignment with the context).
+* integrates **context alignment**
+* penalizes **local displacement**
+* accumulates **trajectory consistency over time**
 
-* **R — Repair**
-  Recovery or re-alignment after a rupture.
+This produces a **continuous coherence field**, not a binary measure.
 
-These regimes allow the extraction of **breakdown–repair structures** and **S–B–R triadic units**.
 
----
-
-# 🔹 Structural coherence (C_inv)
-
-In addition to semantic coherence, TIE–Dialog computes:
-
-**C_inv — invariant structural coherence**
-
-C_inv is derived from **rolling similarity graphs** built over recent turns.
-
-The graph structure is summarized through **spectral invariants of the normalized Laplacian**.
-
-Interpretation:
-
-| Signal |           Meaning                    |
-| ------ | ------------------------------------ |
-| Ct     | semantic/contextual alignment        |
-| C_inv  | structural stability of the dialogue |
-
-This allows distinguishing different rupture types:
-
-| Pattern       |       Interpretation                   |
-| ------------- | -------------------------------------- |
-| Ct ↓, C_inv ↓ | strong rupture (semantic + structural) |
-| Ct ↓, C_inv ~ | semantic drift                         |
-| Ct ~, C_inv ↓ | structural reframe                     |
 
 ---
 
-# 🔹 Participant trajectories
+### Emergent thresholds (Φ)
 
-TIE–Dialog also models **speaker-level dynamics**.
+From the empirical distribution of Cₜ:
 
-Computed measures include:
+* **Φ_low** → breakdown boundary
+* **Φ_high** → stable coherence boundary
 
-**Cᵢ — participant coherence trajectories**
+These thresholds are **data-driven**, not fixed.
 
-These track how each speaker's contributions align with the evolving context.
+---
 
-Two representations are provided:
+### Conversational regimes (S–B–R)
 
-* embedding-based Ci trajectories
-* continuous speaker state trajectories
+Using Cₜ:
 
-This allows identifying roles such as:
+* **S (Stable)** → coherent continuation
+* **B (Break)** → loss of alignment
+* **R (Repair)** → recovery phase
 
-* stabilizing participants
+This enables extraction of **breakdown–repair structures**.
+
+---
+
+## 🔹 Structural Coherence (C_inv)
+
+TIE–Dialog models structure independently of semantics:
+
+* **C_inv — invariant structural coherence**
+
+Computed from **rolling similarity graphs** over turns using:
+
+* k-NN graph construction
+* normalized Laplacian
+* spectral invariants
+
+### Interpretation
+
+| Signal | Meaning                         |
+| ------ | ------------------------------- |
+| Cₜ     | semantic / contextual alignment |
+| C_inv  | structural stability            |
+
+---
+
+## 🔹 IC–III Geometric Layer
+
+The conversation is also modeled as a **trajectory in embedding space**.
+
+### Core quantities
+
+* **dᵢ** — semantic displacement (cosine-based)
+* **κᵢ** — curvature (trajectory change)
+* **τ(t)** — cumulative deformation
+
+These capture **how the dialogue moves**, not just what it means.
+
+---
+
+## 🔹 Structural Drivers (IC–III → IC–II)
+
+TIE–Dialog explicitly models **what drives coherence changes**.
+
+### Additional signals
+
+* **ρₜ — semantic compactness**
+  → how tightly clustered local meaning is
+
+* **Dₜ — structural driver**
+  → combines displacement, curvature, and compactness
+
+These signals quantify **reconfiguration pressure** in the dialogue.
+
+---
+
+## 🔹 Multi-signal Event Detection
+
+Instead of relying only on thresholds, TIE–Dialog uses **multi-channel scoring**:
+
+* semantic drop (ΔCₜ)
+* structural drop (ΔC_inv)
+* structural driver (Dₜ)
+
+### Event types
+
+* **RUPTURE_STRONG** → semantic + structural collapse
+* **RUPTURE_SEM** → semantic drift
+* **RUPTURE_STRUCT** → structural reframe
+* **STABLE**
+
+This makes event detection **robust and interpretable**.
+
+---
+
+## 🔹 Participant Trajectories
+
+Speaker-level dynamics are modeled via:
+
+* **Cᵢ — participant coherence trajectories**
+
+These track how each participant aligns with the evolving context.
+
+### Enables detection of:
+
+* stabilizing agents
 * divergence initiators
 * repair agents
 
 ---
 
-# 🔹 IC–III geometric layer
+## 🔹 Continuous State Trajectories
 
-The IC-III layer models the **geometry of the dialogue trajectory in embedding space**.
+Beyond discrete turns, TIE–Dialog models **continuous participant states**:
 
-Key quantities:
+* inertia-based trajectories
+* diffusion of coherence across speakers
 
-* **dᵢ** — semantic displacement
-* **κᵢ** — curvature (trajectory bending)
-* **τ(t)** — cumulative informational deformation
-
-These quantities capture structural properties of conversational evolution.
+This reveals **latent conversational structure**.
 
 ---
 
-# 🔹 IC-III → IC-II bridge
+## 🔹 Potentiality (℘ₜ)
 
-The framework also estimates **structural drivers of coherence dynamics**.
+TIE–Dialog includes a metric for **structural openness**:
 
-Derived signals include:
+* **℘ₜ — potentiality**
 
-* **ρ(t)** — semantic compactness
-* **Dₜ** — structural stress
-* **Δ*** — estimated structural lag between geometry and coherence
+Based on:
 
-These metrics help study **how structural changes precede or follow coherence shifts**.
+* questions
+* conditionals
+* modal expressions
 
----
-
-# 🔹 Automatic rupture typing
-
-TIE–Dialog also classifies events by combining Ct and C_inv:
-
-* **RUPTURE_STRONG**
-* **RUPTURE_SEM**
-* **RUPTURE_STRUCT**
-* **STABLE**
-
-This classification helps interpret conversational transitions.
+This captures movement toward **proto-coherent states** (exploration, uncertainty).
 
 ---
 
-# 📁 Dataset format
+## 📁 Dataset Format
 
-Upload a `.csv` or `.xlsx` file containing:
+Upload a `.csv` or `.xlsx` with:
 
 ### Required
 
 ```
-turn (int)        — turn index
-participant (str) — speaker label
-text (str)        — utterance content
+turn (int)
+participant (str)
+text (str)
 ```
 
 ### Optional
@@ -179,87 +219,102 @@ text (str)        — utterance content
 timestamp
 ```
 
-If `turn` is missing, the application automatically generates it.
+If `turn` is missing, it is automatically generated.
 
 ---
 
-# 📤 Outputs
+## 📤 Outputs
 
-TIE–Dialog supports exporting:
+### Full dataset
 
 **tie_dialog_full_results.csv**
 
-Full per-turn dataset including:
+Includes:
 
-* coherence signals
+* Cₜ, C_inv
 * S/B/R regimes
 * rupture classifications
-* IC-III metrics
-* participant trajectories
+* IC–III metrics (dᵢ, κᵢ, τ)
+* ρₜ, Dₜ
+* participant trajectories (Cᵢ)
+* ℘ₜ (potentiality)
 
 ---
 
-tie_dialog_ic2_dynamics.csv
+### IC–II dynamics
 
-IC-II coherence dynamics:
+**tie_dialog_ic2_dynamics.csv**
 
-resonance
+* Cₜ
+* resonance
+* informational change
 
-informational change
-
-Ct
 ---
+
+### IC–III geometry
 
 **tie_dialog_ic3_geometry.csv**
 
-IC-III structural metrics:
-
 * dᵢ
 * κᵢ
-* τ
-* ρ
+* τ(t)
+* ρₜ
 * Dₜ
 
 ---
 
+### PDF report
 
 **tie_dialog_report.pdf**
 
-Automatically generated report containing:
+Includes:
 
 * summary metrics
-* key plots
-* event tables
-* parameter configuration
+* plots (Cₜ, IC–III, S–B–R)
+* detected events
+* configuration
 
 ---
 
-# 🎯 Intended Use Cases
+## 🎯 Use Cases
 
 TIE–Dialog can be used for:
 
-* conversation analysis research
-* computational linguistics experiments
+* conversation analysis
+* computational linguistics
 * dialogue system evaluation
 * team communication diagnostics
-* breakdown–repair asymmetry studies
-* conversational structure analysis
+* breakdown–repair studies
+* human–AI interaction analysis
 
 ---
 
-# 🔎 Representation modes
+## 🔎 Representation Modes
 
-The system supports two semantic representation modes:
+* **SBERT / E5 / BGE embeddings (recommended)**
+* **TF-IDF fallback**
 
-**SBERT embeddings (recommended)**
-High-quality semantic representations.
-
-**TF-IDF fallback**
-Lightweight option for environments without transformer models.
-
-The active representation mode is displayed in the UI.
+The active mode is shown in the UI.
 
 ---
+
+## 🧠 Conceptual Position
+
+TIE–Dialog treats conversation as a **dynamic informational system** where:
+
+* coherence is **not static**
+* breakdown is **structural, not noise**
+* repair is **measurable and traceable**
+
+It provides a framework to analyze:
+
+* when conversations hold together
+* when they break
+* how they recover
+* and what structural forces drive those transitions
+
+---
+
 
 # ⚠️ Notes & limitations
 
