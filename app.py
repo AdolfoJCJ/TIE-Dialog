@@ -1,3 +1,15 @@
+# =========================================================
+# TIE–Dialog
+# Conversational Dynamics Lab — CNøde
+#
+# Copyright (C) 2026 Adolfo J. Céspedes Jiménez
+#
+# This program is licensed under the GNU Affero General
+# Public License v3.0 (AGPL-3.0).
+#
+# Commercial licensing available upon request.
+# =========================================================
+
 # ============================
 # app.py — PART 1/3
 # (imports + labels + helpers + Public View + IC-II/IC-III core)
