@@ -326,9 +326,13 @@ It provides a framework to analyze:
 
 # 📌 License
 
-This project is released under the **MIT License**.
+TIE–Dialog is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 
-See the `LICENSE` file for details.
+This means that modified versions deployed as network services must also provide access to their corresponding source code under the same license.
+
+Commercial licensing is available upon request.
+
+Copyright (C) 2026 Adolfo J. Céspedes Jiménez
 
 ---
 
