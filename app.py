@@ -1,15 +1,3 @@
-# =========================================================
-# TIE–Dialog
-# Conversational Dynamics Lab — CNøde
-#
-# Copyright (C) 2026 Adolfo J. Céspedes Jiménez
-#
-# This program is licensed under the GNU Affero General
-# Public License v3.0 (AGPL-3.0).
-#
-# Commercial licensing available upon request.
-# =========================================================
-
 # ============================
 # app.py — PART 1/3
 # (imports + labels + helpers + Public View + IC-II/IC-III core)
@@ -297,22 +285,29 @@ LABELS: Dict[str, Dict[str, str]] = {
 # =====================
 # Warm-up configuration
 # =====================
-WARMUP_TURNS = 5
+
+# Keep this for compatibility, but do not use it to hide early semantic events.
+WARMUP_TURNS = 2
+
+# Only structural channels need real warmup because C_inv needs enough context.
+STRUCTURAL_WARMUP_TURNS = 5
+
+# Do not hide early SBR labels by default.
+SBR_WARMUP_TURNS = 0
+
+# Exclude only the first 2 turns from Φ estimation, not the first 5.
+PHI_WARMUP_TURNS = 2
+
 
 def apply_warmup_ramp(Ct: np.ndarray, warm: int = WARMUP_TURNS, floor: float = 0.10) -> np.ndarray:
-    Ct = np.asarray(Ct, float).copy()
-    n = len(Ct)
-    if n == 0:
-        return Ct
-    warm = int(max(0, warm))
-    if warm <= 0:
-        return Ct
-    if n <= warm:
-        Ct[:] = np.linspace(floor, Ct[-1], n)
-        return np.clip(Ct, 0.0, 1.0)
-    Ct[:warm] = np.linspace(floor, Ct[warm], warm)
-    return np.clip(Ct, 0.0, 1.0)
+    """
+    Deprecated no-op.
 
+    Important: do NOT distort early Ct values.
+    Early turns may contain real semantic/pragmatic ruptures.
+    Structural uncertainty should be handled in C_inv, not by suppressing Ct.
+    """
+    return np.asarray(Ct, float).copy()
 
 # -------------------------------
 # Numeric helpers
@@ -1361,6 +1356,22 @@ def plot_ci_lines(
 # plot_ct_main now returns fig and includes markers/thresholds/annotations
 # ============================
 
+def parse_turn_string(x):
+
+    if pd.isna(x):
+        return []
+
+    s = str(x).strip()
+
+    if s == "":
+        return []
+
+    return [
+        int(v.strip()) - 1
+        for v in s.split(",")
+        if v.strip() != ""
+    ]
+
 def points_to_mask(points: List[int], n: int, w: int) -> np.ndarray:
     """points are 0-indexed; returns boolean mask length n."""
     m = np.zeros(n, dtype=bool)
@@ -1630,6 +1641,24 @@ def event_overlap_rate(reference_events, comparison_events, tolerance: int = 2) 
 
     return float(matches / len(reference_events))
     
+def compute_iou(mask_a, mask_b):
+
+    inter = np.logical_and(
+        mask_a,
+        mask_b
+    ).sum()
+
+    union = np.logical_or(
+        mask_a,
+        mask_b
+    ).sum()
+
+    if union == 0:
+        return np.nan
+
+    return inter / union
+    
+
 def mean_event_displacement(reference_events, comparison_events) -> float:
     """
     Mean distance, in turns, from each real TIE event to the closest shuffled event.
@@ -1821,7 +1850,7 @@ def run_pipeline_from_embeddings(
     # Φ
     if len(Ct_base_local):
         idx = np.arange(len(Ct_base_local))
-        mask_valid = idx >= int(WARMUP_TURNS)
+        mask_valid = idx >= int(PHI_WARMUP_TURNS)
         Ct_for_phi_local = Ct_base_local[mask_valid] if np.any(mask_valid) else Ct_base_local
         phi_low_local = float(np.quantile(Ct_for_phi_local, float(q_low)))
         phi_high_local = float(np.quantile(Ct_for_phi_local, float(q_high)))
@@ -1836,7 +1865,7 @@ def run_pipeline_from_embeddings(
     # simple SBR
     sbr_local = []
     for i, ct in enumerate(Ct_base_local):
-        if i < WARMUP_TURNS:
+        if i < SBR_WARMUP_TURNS:
             sbr_local.append("W")
         elif ct < phi_low_local:
             sbr_local.append("B")
@@ -1989,7 +2018,7 @@ def minmax_signal(x: np.ndarray) -> np.ndarray:
     return (x - lo) / (hi - lo + 1e-9)
 
 
-def compare_embedding_runs(runs: Dict[str, dict]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def compare_embedding_runs(runs: Dict[str, dict]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Compares coherence/event dynamics across embedding models.
 
@@ -2279,7 +2308,7 @@ def run_parameter_robustness(
     n_runs: int = 30,
     pct: float = 0.15,
     seed: int = 42,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     rng = np.random.default_rng(int(seed))
 
     rows = []
@@ -2349,6 +2378,53 @@ def run_parameter_robustness(
         })
 
     df_runs = pd.DataFrame(rows)
+    
+    perturbed_param_names = [
+        "alpha_context",
+        "beta",
+        "b",
+        "q_low",
+        "q_high",
+        "env_alpha",
+        "env_span",
+        "cinv_window",
+        "cinv_knn",
+        "cinv_thr",
+        "cinv_keigs",
+    ]
+
+    movement_rows = []
+
+    for param in perturbed_param_names:
+        if param not in df_runs.columns:
+            continue
+
+        base_value = base_params.get(param, np.nan)
+        values = pd.to_numeric(df_runs[param], errors="coerce")
+
+        mean_value = float(values.mean())
+        min_value = float(values.min())
+        max_value = float(values.max())
+        mean_abs_delta = float((values - float(base_value)).abs().mean())
+
+        if abs(float(base_value)) > 1e-9:
+            mean_pct_delta = float(
+                ((values - float(base_value)).abs() / abs(float(base_value))).mean()
+            )
+        else:
+            mean_pct_delta = np.nan
+
+        movement_rows.append({
+            "parameter": param,
+            "baseline": base_value,
+            "mean_perturbed": mean_value,
+            "min_perturbed": min_value,
+            "max_perturbed": max_value,
+            "mean_abs_delta": mean_abs_delta,
+            "mean_pct_delta": mean_pct_delta,
+        })
+
+    df_movement = pd.DataFrame(movement_rows)
 
     df_summary = pd.DataFrame([{
         "Ct_corr_mean": float(df_runs["Ct_corr"].mean()),
@@ -2360,7 +2436,7 @@ def run_parameter_robustness(
         "structural_jaccard_mean": float(df_runs["structural_jaccard"].mean()),
     }])
 
-    return df_runs, df_summary
+    return df_runs, df_summary, df_movement
         
 def classify_event_scores(
     event_scores,
@@ -2394,7 +2470,7 @@ def classify_event_scores(
             labels.append("RUPTURE_SEM")
 
         # 3) structural rupture when structural clearly dominates semantic
-        elif struct[i] >= struct_thr and struct[i] >= sem[i] + struct_margin and D[i] >= d_thr:
+        elif struct[i] >= struct_thr and D[i] >= d_thr:
             labels.append("RUPTURE_STRUCT")
 
         else:
@@ -3597,6 +3673,7 @@ with st.sidebar:
     with data_tab:
         use_demo = st.checkbox(L["load_demo"], value=True)
         uploaded = None if use_demo else st.file_uploader(L["upload"], type=["csv", "xlsx"])
+        
 
     with core_tab:
         st.subheader(L["sem_repr"])
@@ -3606,8 +3683,13 @@ with st.sidebar:
             ["auto", "sbert", "e5", "bge", "instructor", "tfidf"],
             index=0
         )
-
-    
+        
+        uploaded_annotations = st.file_uploader(
+            "Upload human annotations",
+            type=["csv"],
+            key="annotations"
+        )
+                
         st.subheader(L["phi"])
         q_low = ui_slider("Φ_low percentile", 0.05, 0.50, 0.20, 0.01)
         q_high = ui_slider("Φ_high percentile", 0.50, 0.95, 0.80, 0.01)
@@ -3734,12 +3816,42 @@ else:
     if uploaded is None:
         st.info("Upload a dataset or enable demo.")
         st.stop()
+        
     if str(uploaded.name).lower().endswith(".csv"):
         df = pd.read_csv(uploaded)
     else:
         df = pd.read_excel(uploaded)
 
 df, missing = _clean_df(df)
+
+# =========================
+# Human annotations
+# =========================
+
+if uploaded_annotations is not None:
+
+    annotations_df = pd.read_csv(
+        uploaded_annotations
+    )
+
+    annotations_df["rupture_points"] = (
+        annotations_df["turns"]
+        .apply(parse_turn_string)
+    )
+
+    annotations_df["human_mask"] = (
+        annotations_df["rupture_points"]
+        .apply(
+            lambda pts: points_to_mask(
+                pts,
+                n=len(df),
+                w=pilot_w
+            )
+        )
+    )
+
+else:
+    annotations_df = None
 
 # =========================
 # Core dialogue arrays + embeddings
@@ -3764,6 +3876,17 @@ embedding_pairs_df = None
 embedding_alignment_df = None
 embedding_shuffle_df = None
 embedding_variance_df = None
+
+baseline_compare_df = None
+event_overlap_df = None
+shuffled_diagnostic_df = None
+
+ablation_df = None
+semantic_ablation_df = None
+
+robustness_runs_df = None
+robustness_summary_df = None
+robustness_movement_df = None
 
 if compare_embeddings and len(selected_compare_embeddings) >= 2:
 
@@ -3966,7 +4089,7 @@ Ct_smooth = np.clip(Ct_smooth, 0.0, 1.0)
 # -------------------------
 if len(Ct_base):
     idx = np.arange(len(Ct_base))
-    mask_valid = idx >= int(WARMUP_TURNS)
+    mask_valid = idx >= int(PHI_WARMUP_TURNS)
     Ct_for_phi = Ct_base[mask_valid] if np.any(mask_valid) else Ct_base
 
     phi_low_eff  = float(np.quantile(Ct_for_phi, float(q_low)))
@@ -4078,24 +4201,96 @@ event_scores = compute_event_scores(
     D_t=signals["D_t"]
 )
 
-transition_zones = extract_transition_zones(
+
+transition_pressure_series = np.asarray(
     event_scores["transition_pressure"],
-    threshold=0.18,
-    min_len=2,
+    dtype=float,
+)
+
+human_mask = np.zeros(
+    len(transition_pressure_series),
+    dtype=bool
+)
+
+if annotations_df is not None:
+
+    for _, row in annotations_df.iterrows():
+
+        rupture_points = parse_turn_string(
+            row["turns"]
+        )
+
+        mask = points_to_mask(
+            rupture_points,
+            n=len(transition_pressure_series),
+            w=pilot_w
+        )
+
+        human_mask |= mask
+
+thr_mode = st.radio(
+    "Transition threshold mode",
+    ["Adaptive", "Manual"],
+    horizontal=True,
+)
+
+if thr_mode == "Adaptive":
+    transition_thr = float(np.quantile(transition_pressure_series, 0.48))
+else:
+    transition_thr = st.slider(
+        "Transition pressure threshold",
+        0.00, 1.00, 0.26, 0.01
+    )
+
+transition_zones = extract_transition_zones(
+    transition_pressure_series,
+    threshold=transition_thr,
+    min_len=3,
+)
+
+transition_mask = np.zeros(
+    len(transition_pressure_series),
+    dtype=bool
+)
+
+for z in transition_zones:
+
+    transition_mask[
+        z["start"]:z["end"]+1
+    ] = True
+
+intersection = np.sum(
+    human_mask & transition_mask
+)
+
+union = np.sum(
+    human_mask | transition_mask
+)
+
+iou = (
+    intersection / union
+    if union > 0
+    else np.nan
+)
+
+coverage = (
+    intersection / np.sum(human_mask)
+    if np.sum(human_mask) > 0
+    else np.nan
 )
 
 transition_mask = np.zeros(len(Ct_base), dtype=bool)
 
 for z in transition_zones:
-    transition_mask[z["start"]:z["end"]+1] = True
+    transition_mask[z["start"]:z["end"] + 1] = True
 
 event_labels_v2 = classify_event_scores(
     event_scores,
     D_t=D_t,
     strong_thr=0.48,
-    sem_thr=0.30,
-    struct_thr=0.32,
-    d_thr=0.22,
+    sem_thr=0.32,
+    struct_thr=0.26,
+    d_thr=0.16,
     sem_margin=0.04,
     struct_margin=0.04,
 )
@@ -4103,11 +4298,10 @@ event_labels_v2 = classify_event_scores(
 event_masks = labels_to_event_masks(
     event_labels_v2,
     min_sem_len=1,
-    min_struct_len=2,
+    min_struct_len=1,
     min_strong_len=1,
 )
 
-transition_mask=transition_mask,
 
 if "transition" not in event_masks:
     transition_pressure = np.asarray(
@@ -4154,7 +4348,7 @@ if phi_high_eff <= phi_low_eff + 0.08:
 sbr_fixed = []
 
 for i in range(len(Ct_base)):
-    if i < WARMUP_TURNS:
+    if i < SBR_WARMUP_TURNS:
         sbr_fixed.append("W")
     elif event_labels_final[i] == "RUPTURE_STRONG":
         sbr_fixed.append("B")
@@ -4267,14 +4461,6 @@ transition_pressure_series = np.asarray(
     dtype=float,
 )
 
-transition_zones = extract_transition_zones(
-    transition_pressure_series,
-    threshold=np.quantile(
-        transition_pressure,
-        0.55
-    ),
-    min_len=3,
-)
 
 transition_zone_df = build_transition_zone_dataframe(
     transition_zones
@@ -4292,11 +4478,25 @@ fig_pressure.add_trace(
     )
 )
 
+fig_pressure.add_trace(
+    go.Scatter(
+        x=np.arange(1, len(D_t) + 1),
+        y=np.asarray(D_t, dtype=float),
+        mode="lines",
+        name="Geometric driver (Dₜ)",
+        line=dict(
+            width=2,
+            dash="dash",
+        ),
+        opacity=0.85,
+    )
+)
+
 fig_pressure.add_hline(
-    y=0.42,
+    y=float(transition_thr),
     line_dash="dash",
     opacity=0.4,
-    annotation_text="Transition threshold",
+    annotation_text=f"Transition threshold = {transition_thr:.2f}",
 )
 
 for z in transition_zones:
@@ -4317,6 +4517,42 @@ fig_pressure.update_layout(
 )
 
 st.plotly_chart(fig_pressure, use_container_width=True)
+
+# =========================
+# Human annotation overlays
+# =========================
+
+if annotations_df is not None:
+
+    for _, row in annotations_df.iterrows():
+
+        segs = mask_to_segments(
+            row["human_mask"]
+        )
+
+        for s, e in segs:
+
+            fig_pressure.add_vrect(
+                x0=s + 1,
+                x1=e + 1,
+                fillcolor="rgba(0,0,255,0.10)",
+                line_width=0,
+                layer="below",
+            )
+
+    st.metric(
+        "Human vs Transition IoU",
+        round(float(iou), 3)
+        if np.isfinite(iou)
+        else "n/a"
+    )
+
+    st.metric(
+        "Human coverage",
+        round(float(coverage), 3)
+        if np.isfinite(coverage)
+        else "n/a"
+    )
 
 st.dataframe(
     transition_zone_df,
@@ -4420,7 +4656,8 @@ if show_baseline_comparison:
     c1.metric("Added Structural Value — global", f"{ASV_global:.3f}" if np.isfinite(ASV_global) else "n/a")
     c2.metric("Max baseline correlation", f"{max_corr:.3f}" if np.isfinite(max_corr) else "n/a")
 
-    st.dataframe(pd.DataFrame(corr_rows), use_container_width=True)
+    baseline_compare_df = pd.DataFrame(corr_rows)
+    st.dataframe(baseline_compare_df, use_container_width=True)
 
     st.caption(
         "ASV_global = 1 - max correlation between the TIE composite and the strongest simple baseline. "
@@ -4570,7 +4807,8 @@ if show_baseline_comparison:
         "shuffled_event_turns_1_indexed": [int(e) + 1 for e in shuffled_events],
     }]
 
-    st.dataframe(pd.DataFrame(shuffled_rows), use_container_width=True)
+    shuffled_diagnostic_df = pd.DataFrame(shuffled_rows)
+    st.dataframe(shuffled_diagnostic_df, use_container_width=True)
 
     c5, c6 = st.columns(2)
     c5.metric(
@@ -4840,11 +5078,260 @@ if show_ablation_comparison:
         "rather than on a single component alone."
     )
     
+def make_full_diagnostics_pdf(
+    embedding_summary_df=None,
+    embedding_pairs_df=None,
+    embedding_alignment_df=None,
+    embedding_shuffle_df=None,
+    embedding_variance_df=None,
+
+    baseline_compare_df=None,
+    event_overlap_df=None,
+    shuffled_diagnostic_df=None,
+
+    ablation_df=None,
+    semantic_ablation_df=None,
+    robustness_summary_df=None,
+    robustness_movement_df=None,
+    robustness_runs_df=None,
+
+    setup=None,
+):
+    buffer = BytesIO()
+
+    def add_df_page(pdf, df, title, caption=None, max_rows=18, max_cols=6):
+        if df is None or len(df) == 0:
+            return
+
+        df_show = df.copy()
+
+    # Format floats
+        for col in df_show.columns:
+            if pd.api.types.is_float_dtype(df_show[col]):
+                df_show[col] = df_show[col].map(
+                    lambda x: f"{x:.4f}" if pd.notna(x) else ""
+                )
+
+    # Convert all cells to string and truncate long values
+        df_show = df_show.astype(str)
+
+        for col in df_show.columns:
+            df_show[col] = df_show[col].map(
+                lambda x: x[:34] + "…" if len(x) > 34 else x
+            )
+
+    # Split by rows and columns
+        row_chunks = [
+            df_show.iloc[i:i + max_rows]
+            for i in range(0, len(df_show), max_rows)
+        ]
+
+        col_chunks = [
+            list(df_show.columns[i:i + max_cols])
+            for i in range(0, len(df_show.columns), max_cols)
+        ]
+
+        total_pages = max(1, len(row_chunks) * len(col_chunks))
+        page_n = 1
+
+        for row_chunk in row_chunks:
+            for col_chunk in col_chunks:
+                chunk = row_chunk.loc[:, col_chunk]
+
+                fig, ax = plt.subplots(figsize=(11.69, 8.27))
+                ax.axis("off")
+
+                page_title = title
+                if total_pages > 1:
+                    page_title = f"{title} — page {page_n}/{total_pages}"
+
+                ax.set_title(page_title, fontsize=13, pad=12)
+
+                table = ax.table(
+                    cellText=chunk.values,
+                    colLabels=chunk.columns,
+                    loc="center",
+                    cellLoc="center",
+                    colLoc="center",
+                )
+
+                table.auto_set_font_size(False)
+                table.set_fontsize(6.2)
+                table.scale(1.0, 1.45)
+
+                for _, cell in table.get_celld().items():
+                    cell.set_linewidth(0.25)
+                    cell.set_text_props(wrap=True)
+
+                if caption:
+                    fig.text(
+                        0.05,
+                        0.025,
+                        caption,
+                        ha="left",
+                        va="bottom",
+                        fontsize=7.2,
+                        wrap=True,
+                    )
+
+                pdf.savefig(fig, bbox_inches="tight")
+                plt.close(fig)
+
+                page_n += 1
+            
+    with PdfPages(buffer) as pdf:
+
+        # =========================
+        # COVER PAGE
+        # =========================
+
+        fig, ax = plt.subplots(figsize=(8.27, 11.69))
+        ax.axis("off")
+
+        cover_text = (
+            "TIE–Dialog Robustness & Diagnostics Report\n\n"
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+            "This report summarizes embedding robustness, baseline comparisons, "
+            "ablation diagnostics, and parameter robustness analyses for the current run."
+        )
+
+        if setup:
+            cover_text += (
+                f"\n\nEmbedding mode: {setup.get('embedding_mode')}"
+                f"\nRobustness runs: {setup.get('n_runs')}"
+                f"\nPerturbation: ±{setup.get('pct', 0) * 100:.1f}%"
+                f"\nSeed: {setup.get('seed')}"
+            )
+
+        ax.text(
+            0.08,
+            0.92,
+            cover_text,
+            va="top",
+            ha="left",
+            fontsize=12,
+            wrap=True,
+        )
+
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+        # =========================
+        # EMBEDDINGS
+        # =========================
+
+        add_df_page(
+            pdf,
+            embedding_summary_df,
+            "Embedding summary",
+            "Summary statistics across embedding trajectories."
+        )
+
+        add_df_page(
+            pdf,
+            embedding_pairs_df,
+            "Embedding pairwise comparison",
+            "Pairwise robustness comparison between embedding trajectories."
+        )
+
+        add_df_page(
+            pdf,
+            embedding_alignment_df,
+            "Embedding event alignment",
+            "Overlap and alignment of event regions across embeddings."
+        )
+
+        add_df_page(
+            pdf,
+            embedding_shuffle_df,
+            "Embedding shuffled diagnostics",
+            "Comparison against shuffled-order controls."
+        )
+
+        add_df_page(
+            pdf,
+            embedding_variance_df,
+            "Embedding variance decomposition",
+            "Variance decomposition across embeddings and dialogue structure."
+        )
+
+        # =========================
+        # BASELINES
+        # =========================
+
+        add_df_page(
+            pdf,
+            baseline_compare_df,
+            "Baseline comparison",
+            "Comparison between TIE–Dialog and simpler baseline signals."
+        )
+
+        add_df_page(
+            pdf,
+            event_overlap_df,
+            "Baseline event overlap",
+            "Overlap between TIE–Dialog event regions and baseline event regions."
+        )
+        
+        add_df_page(
+            pdf,
+            shuffled_diagnostic_df,
+            "Shuffled event-localization diagnostic",
+            "Comparison between real TIE event locations and shuffled-order event locations."
+        )
+
+        # =========================
+        # ABLATION
+        # =========================
+
+        add_df_page(
+            pdf,
+            ablation_df,
+            "Ablation diagnostics",
+            "Effect of removing semantic, structural, or geometric layers."
+        )
+        
+        add_df_page(
+            pdf,
+            semantic_ablation_df,
+            "Semantic drift ablation",
+            "Effect of removing structural or geometric information from semantic drift event reconstruction."
+        )
+
+        # =========================
+        # ROBUSTNESS
+        # =========================
+
+        add_df_page(
+            pdf,
+            robustness_summary_df,
+            "Parameter robustness summary",
+            "Summary of output stability under parameter perturbation."
+        )
+
+        add_df_page(
+            pdf,
+            robustness_movement_df,
+            "Parameter movement summary",
+            "Amount of perturbation applied to each parameter during robustness testing."
+        )
+
+        add_df_page(
+            pdf,
+            robustness_runs_df,
+            "Per-run robustness results",
+            "Detailed results for each perturbed parameter configuration."
+        )
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # =========================
 # Parameter robustness
 # =========================
 robustness_runs_df = None
 robustness_summary_df = None
+robustness_movement_df = None
 
 if run_param_robustness:
     base_params = {
@@ -4869,7 +5356,7 @@ if run_param_robustness:
         "structural": np.asarray(structural_mask, dtype=bool),
     }
 
-    robustness_runs_df, robustness_summary_df = run_parameter_robustness(
+    robustness_runs_df, robustness_summary_df, robustness_movement_df = run_parameter_robustness(
         E=E,
         texts=texts,
         participants=participants,
@@ -4894,6 +5381,17 @@ if run_param_robustness:
         "Higher Ct correlation, DTW similarity, S–B–R agreement, and Jaccard scores indicate greater robustness."
     )
 
+    st.markdown("### Parameter movement summary")
+    st.dataframe(robustness_movement_df, use_container_width=True)
+
+    st.caption(
+        "This table shows how much each parameter was perturbed during the robustness test. "
+        "The baseline column reports the original value used in the main run. "
+        "mean_perturbed, min_perturbed, and max_perturbed summarize the sampled parameter range across robustness runs. "
+        "mean_abs_delta reports the average absolute movement from baseline, while mean_pct_delta reports the average relative movement. "
+        "This makes explicit which parameters were modified and how strongly the robustness test stressed the pipeline."
+    )
+    
     st.markdown("### Per-run results")
     st.dataframe(robustness_runs_df, use_container_width=True)
     
@@ -4904,7 +5402,43 @@ if run_param_robustness:
         "The Jaccard scores measure how much the detected strong, semantic, and structural event masks overlap "
         "with the original event masks. The remaining columns show the exact parameter values used in each run."
     )
+    
+    full_diag_pdf = make_full_diagnostics_pdf(
+        embedding_summary_df=embedding_summary_df,
+        embedding_pairs_df=embedding_pairs_df,
+        embedding_alignment_df=embedding_alignment_df,
+        embedding_shuffle_df=embedding_shuffle_df,
+        embedding_variance_df=embedding_variance_df,
 
+        baseline_compare_df=baseline_compare_df,
+        event_overlap_df=event_overlap_df,
+        shuffled_diagnostic_df=shuffled_diagnostic_df,
+
+        ablation_df=ablation_df,
+        semantic_ablation_df=semantic_ablation_df,
+
+        robustness_summary_df=robustness_summary_df,
+        robustness_movement_df=robustness_movement_df,
+        robustness_runs_df=robustness_runs_df,
+
+        setup={
+            "embedding_mode": used_mode,
+            "n_runs": robustness_n_runs,
+            "pct": robustness_pct,
+            "seed": robustness_seed,
+        },
+    )
+
+    if full_diag_pdf is not None:
+        st.download_button(
+            label="Download robustness & diagnostics report (PDF)",
+            data=full_diag_pdf,
+            file_name="tie_dialog_robustness_diagnostics_report.pdf",
+            mime="application/pdf",
+        )
+    else:
+        st.warning("Robustness diagnostics PDF could not be generated.")
+    
 ci_df = compute_ci_series(
     E=E,
     participants=participants,
@@ -5056,7 +5590,7 @@ if show_envelope:
                 y=np.asarray(Ct_smooth, float),
                 mode="lines",
                 name="Cₜ_smooth",
-                line=dict(width=3),
+                line=dict(width=4),
             )
         )
 
