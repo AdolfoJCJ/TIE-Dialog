@@ -115,18 +115,18 @@ These thresholds are:
 
 ---
 
-## Conversational regimes (S–B–R)
+## Conversational regimes (S–T-B)
 
 Using coherence dynamics, TIE–Dialog segments conversation into:
 
 | Regime | Meaning |
 |---|---|
 | S | Stable |
+| T | Transition |
 | B | Breakdown |
-| T | Transitional |
 
-This allows the framework to model conversational stability,
-transition zones, and breakdown dynamics over time.
+This allows the framework to model conversational stability, transition zones and breakdown dynamics over time.
+
 ---
 
 # 🔹 Structural Coherence (C_inv)
@@ -248,9 +248,9 @@ TIE–Dialog detects events using coupled signals rather than isolated threshold
 
 | Event | Meaning |
 |---|---|
-| STRONG_RUPTURE | semantic + structural collapse |
-| SEMANTIC_DRIFT | semantic drift |
-| STRUCTURAL_REORGANIZATION | structural reorganization |
+| STRONG_RUPT | semantic + structural collapse |
+| SEM_DRIFT | semantic drift |
+| STRUCT_RECONF | structural reorganization |
 | STABLE | stable continuation |
 
 This makes event detection:
