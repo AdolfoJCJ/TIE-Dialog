@@ -123,10 +123,10 @@ Using coherence dynamics, TIE–Dialog segments conversation into:
 |---|---|
 | S | Stable |
 | B | Breakdown |
-| R | Repair / transition |
+| T | Transitional |
 
-This enables extraction of breakdown–repair structures over time.
-
+This allows the framework to model conversational stability,
+transition zones, and breakdown dynamics over time.
 ---
 
 # 🔹 Structural Coherence (C_inv)
@@ -218,7 +218,7 @@ Instead of modeling events as isolated points, TIE–Dialog extracts:
 
 - transition regions,
 - breakdown windows,
-- repair phases,
+- stable phases,
 - structural reorganization zones.
 
 Each zone includes:
@@ -248,9 +248,9 @@ TIE–Dialog detects events using coupled signals rather than isolated threshold
 
 | Event | Meaning |
 |---|---|
-| RUPTURE_STRONG | semantic + structural collapse |
-| RUPTURE_SEM | semantic drift |
-| RUPTURE_STRUCT | structural reorganization |
+| STRONG_RUPTURE | semantic + structural collapse |
+| SEMANTIC_DRIFT | semantic drift |
+| STRUCTURAL_REORGANIZATION | structural reorganization |
 | STABLE | stable continuation |
 
 This makes event detection:
