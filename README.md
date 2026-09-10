@@ -329,19 +329,7 @@ These signals describe **movement along each individual dimension**.
 
 TIE–Dialog measures the total one-turn movement of the complete 3D state as
 
-$$
-J_t
-=
-\frac{
-\sqrt{
-(\Delta S_t)^2+
-(\Delta R_t)^2+
-(\Delta D_t)^2
-}
-}{
-\sqrt{3}
-}
-$$
+$$J_t=\frac{\sqrt{(\Delta S_t)^2+(\Delta R_t)^2+(\Delta D_t)^2}}{\sqrt{3}}$$
 
 Since each state dimension is bounded to $[0,1]$, division by $\sqrt{3}$ normalizes the maximum possible raw step to 1.
 
