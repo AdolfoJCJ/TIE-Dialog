@@ -621,7 +621,7 @@ These modes make it possible to distinguish three different questions:
 TIE–Dialog can export turn-level results containing core and derived variables such as:
 
 - `Ct`
-- `$C_{\mathrm{inv}}$`
+- `$$C_{\mathrm{inv}}$$`
 - `S_t`
 - `R_t`
 - `D_t`
