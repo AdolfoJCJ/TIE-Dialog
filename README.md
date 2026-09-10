@@ -404,47 +404,17 @@ These are descriptive associations and do not imply causal coupling.
 
 At each valid turn, the three rolling level correlations define a local correlation structure:
 
-$$
-\mathbf{C}_t
-=
-\begin{bmatrix}
-1 & r_{SR}(t) & r_{SD}(t) \\
-r_{SR}(t) & 1 & r_{RD}(t) \\
-r_{SD}(t) & r_{RD}(t) & 1
-\end{bmatrix}
-$$
+$$\mathbf{C}_t=\begin{bmatrix}1 & r_{SR}(t) & r_{SD}(t) \\r_{SR}(t) & 1 & r_{RD}(t) \\r_{SD}(t) & r_{RD}(t) & 1\end{bmatrix}$$
 
 TIE–Dialog then measures how much this structure changes between consecutive turns using a normalized Frobenius-distance formulation.
 
 With
 
-$$
-\Delta \mathbf{r}_t
-=
-\left(
-\Delta r_{SR}(t),
-\Delta r_{SD}(t),
-\Delta r_{RD}(t)
-\right)
-$$
+$$\Delta \mathbf{r}_t=\left(\Delta r_{SR}(t),\Delta r_{SD}(t),\Delta r_{RD}(t)\right)$$
 
 the current implementation computes
 
-$$
-Q_t
-=
-\frac{
-\sqrt{
-2\left[
-(\Delta r_{SR})^2+
-(\Delta r_{SD})^2+
-(\Delta r_{RD})^2
-\right]
-}
-}{
-\sqrt{24}
-}
-$$
+$$Q_t=\frac{\sqrt{2\left[(\Delta r_{SR})^2+(\Delta r_{SD})^2+(\Delta r_{RD})^2\right]}}{\sqrt{24}}$$
 
 Interpretation:
 
