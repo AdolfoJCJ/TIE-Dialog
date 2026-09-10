@@ -222,11 +222,7 @@ It extracts several local geometric descriptors.
 
 For consecutive normalized turn embeddings, the current implementation uses cosine-based displacement:
 
-$$
-d_i(t)
-=
-\frac{1-\cos\!\left(E_t,E_{t-1}\right)}{2}
-$$
+$$d_i(t)=\frac{1-\cos\!\left(E_t,E_{t-1}\right)}{2}$$
 
 This quantity is subsequently smoothed and normalized within the dialogue.
 
