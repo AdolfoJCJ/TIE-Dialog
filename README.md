@@ -348,17 +348,7 @@ It is not a transition probability.
 
 For valid non-zero movements, TIE–Dialog also computes the unit direction components
 
-$$
-\widehat{\Delta \mathbf{z}}_t
-=
-\frac{\Delta \mathbf{z}_t}{\left\|\Delta \mathbf{z}_t\right\|_2}
-=
-\left(
-\frac{\Delta S_t}{\left\|\Delta \mathbf{z}_t\right\|_2},
-\frac{\Delta R_t}{\left\|\Delta \mathbf{z}_t\right\|_2},
-\frac{\Delta D_t}{\left\|\Delta \mathbf{z}_t\right\|_2}
-\right)
-$$
+$$\widehat{\Delta \mathbf{z}}_t=\frac{\Delta \mathbf{z}_t}{\left\|\Delta \mathbf{z}_t\right\|_2}=\left(\frac{\Delta S_t}{\left\|\Delta\mathbf{z}_t\right\|_2},\frac{\Delta R_t}{\left\|\Delta \mathbf{z}_t\right\|_2},\frac{\Delta D_t}{\left\|\Delta\mathbf{z}_t\right\|_2}\right)$$
 
 These values describe **which dimensions contribute to the direction of the current multivariate movement**, independently of its overall magnitude.
 
