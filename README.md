@@ -1,6 +1,6 @@
 # TIE–Dialog — 📈 Conversational Dynamics Lab 📉
 
-## A multivariate computational framework for conversational dynamics
+## A multicomponent computational framework for conversational dynamics
 
 ## 🌐 Live Demo (Hugging Face Spaces)
 
@@ -13,36 +13,49 @@ https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
 
 ## Overview
 
-**TIE–Dialog** is a Streamlit-based research framework for representing and analyzing dialogue as a **continuous, evolving multivariate system**.
+**TIE–Dialog** is a Streamlit-based research framework for representing and analyzing dialogue as a **continuous, evolving multicomponent system**.
 
-Rather than treating conversation as a sequence of isolated utterances, or assuming that conversational change can be captured by a single transition score, TIE–Dialog constructs several complementary continuous dimensions and studies how they evolve and interact over time.
+Rather than treating conversation as a sequence of isolated utterances, or assuming that conversational change can be captured by one transition score, TIE–Dialog keeps several computational observables separate and examines how they evolve, dissociate, and interact over time.
 
-The current framework centers on three computational dimensions:
-
-- **$S_t$ — contextual / semantic drift**
-- **$R_t$ — structural reconfiguration**
-- **$D_t$ — geometry driver**
-
-Together they define the turn-level computational state
+The current primary state is five-dimensional:
 
 $$
-\mathbf{z}_t = \left(S_t, R_t, D_t\right)
+\mathbf{z}_t =
+\left(
+S_t,
+R_t,
+d_t,
+\kappa_t,
+u_t
+\right)
 $$
 
-TIE–Dialog then analyzes not only the values of these dimensions, but also:
+where:
 
-- their turn-to-turn changes,
-- the magnitude and direction of joint state movement,
-- local dependence among dimensions,
-- changes in that dependence structure,
-- lead–lag associations,
-- phase-space trajectories,
-- operational event regions,
+- **$S_t$** — contextual discontinuity
+- **$R_t$** — structural instability / low persistence
+- **$d_t$** — local angular displacement in embedding space
+- **$\kappa_t$** — turning-angle curvature of the embedding trajectory
+- **$u_t$** — local semantic dispersion
+
+A central methodological principle of the current version is:
+
+> **Do not collapse distinct computational signals into a single transition score before their relationships have been empirically established.**
+
+This is why the former composite **Geometry Driver $D_t$** is no longer part of the primary Research Tutorial state. It is retained only as an **exploratory / backwards-compatible diagnostic summary**.
+
+TIE–Dialog analyzes:
+
+- the five continuous state coordinates,
+- turn-to-turn changes in each coordinate,
+- total multivariate movement,
+- the contribution of each coordinate to that movement,
+- time-varying dependence among dimensions,
+- change in the full dependency structure,
+- lead–lag associations among first differences,
+- operational event diagnostics,
 - participant-level coherence trajectories,
 - and robustness across representations and parameter settings.
-
-> **Scientific position**  
-> TIE–Dialog was originally motivated by the **Theory of Informational Emergence (TIE)**, but the software is designed to remain empirically testable independently of the broader theory. Its computational outputs are operational measurements derived from dialogue representations; they do not require accepting any ontological assumptions associated with TIE.
 
 ---
 
@@ -84,26 +97,34 @@ If `turn` is missing, the app can generate turn indices automatically.
 
 # 🧩 Computational Architecture
 
-TIE–Dialog combines contextual, structural, and geometric representations of the same conversation.
+TIE–Dialog combines contextual, structural, and geometric descriptions of the same conversation.
 
 | Component | Main role |
 |---|---|
 | **Embeddings** | Represent turn content in a vector space |
 | **IC–II / $C_t$** | Estimate contextual continuity over time |
 | **$C_{\mathrm{inv}}$** | Estimate persistence of rolling graph structure |
-| **IC–III** | Characterize local geometric movement in embedding space |
-| **$S_t$, $R_t$, $D_t$** | Define the continuous multivariate conversational state |
+| **$S_t$** | Contextual discontinuity: $1-C_t$ |
+| **$R_t$** | Structural instability: $1-C_{\mathrm{inv}}$ |
+| **IC–III / $d_t$** | Local angular displacement |
+| **IC–III / $\kappa_t$** | Turning-angle curvature |
+| **$u_t$** | Local semantic dispersion: $1-\rho_t$ |
 | **Cross-dimensional analysis** | Measure joint movement, dependence, reorganization, and temporal association |
-| **Event diagnostics** | Produce operational semantic, structural, and breakdown-like regions |
+| **Event diagnostics** | Retain operational semantic, structural, and breakdown-like regions as secondary diagnostics |
 | **Robustness layer** | Test sensitivity to embeddings, baselines, shuffled order, ablations, and parameters |
 
-The framework deliberately separates **continuous state variables** from **event-oriented diagnostic scores**. This distinction is central to the current version of TIE–Dialog.
+The framework deliberately separates:
+
+1. **primary continuous observables**, and
+2. **secondary composite / event-oriented diagnostics**.
+
+This distinction is central to the current version.
 
 ---
 
 # 🔎 Semantic Representation
 
-Each turn is first mapped to an embedding representation.
+Each conversational turn is first mapped to an embedding representation.
 
 Supported modes include:
 
@@ -113,13 +134,21 @@ Supported modes include:
 - **INSTRUCTOR**
 - **TF-IDF fallback**
 
-The active representation model can be changed while keeping the rest of the computational pipeline fixed, allowing the user to test whether observed dynamics are specific to one embedding space or remain partially stable across several representations.
+The representation model can be changed while keeping the remaining computational pipeline fixed.
+
+This makes it possible to ask whether an observed dynamic pattern is:
+
+- specific to one embedding space,
+- partially robust across representations,
+- or unstable under representational changes.
+
+Agreement across embeddings should be interpreted as **representational robustness**, not as proof of psychological or human validity.
 
 ---
 
 # 🔹 IC–II — Contextual Coherence Dynamics
 
-## Cₜ — contextual coherence
+## $C_t$ — contextual continuity
 
 TIE–Dialog models coherence as a **temporally evolving contextual trajectory**, rather than as a static pairwise similarity score.
 
@@ -128,7 +157,14 @@ At each turn, the current utterance embedding is evaluated relative to an evolvi
 - longer-term conversational memory,
 - and recent local context.
 
-The IC–II layer uses semantic resonance, local displacement, and temporal persistence to construct a contextual coherence signal:
+The IC–II layer uses:
+
+- semantic resonance,
+- local displacement,
+- temporal persistence,
+- and a recovery term
+
+to construct:
 
 $$
 C_t \in [0,1]
@@ -136,49 +172,57 @@ $$
 
 Interpretation:
 
-- **higher $C_t$** → stronger continuity with the evolving conversational context,
-- **lower $C_t$** → greater contextual divergence.
+- **higher $C_t$** → stronger continuity with the evolving conversational context
+- **lower $C_t$** → greater contextual divergence
 
-$C_t$ is the main contextual continuity variable used by the current framework.
+$C_t$ remains an **operational computational measure**, not a direct psychological measurement of coherence.
 
 ---
 
-# 🔹 Sₜ — Contextual / Semantic Drift
+# 🔹 $S_t$ — Contextual Discontinuity
 
-The first dimension of the continuous state is defined as
+The first coordinate of the primary state is:
 
 $$
-S_t = 1 - C_t
+S_t = 1-C_t
 $$
 
 Therefore:
 
-- **low $S_t$** → strong contextual continuity,
-- **high $S_t$** → stronger contextual / semantic drift.
+- **low $S_t$** → stronger contextual continuity
+- **high $S_t$** → greater contextual discontinuity
 
-$S_t$ is a **continuous descriptive dimension**. It is not, by itself, a transition probability or an event label.
+The current version uses the term **Contextual Discontinuity** rather than treating $S_t$ itself as a directional event called “semantic drift”.
+
+A directional process is better represented by its change:
+
+$$
+\Delta S_t = S_t-S_{t-1}
+$$
+
+$S_t$ is a continuous state coordinate, not a transition probability.
 
 ---
 
-# 🔹 Structural Persistence — C_inv
+# 🔹 Structural Persistence — $C_{\mathrm{inv}}$
 
-TIE–Dialog also characterizes the organization of the conversation through **rolling similarity graphs**.
+TIE–Dialog characterizes local conversational organization through **rolling similarity graphs**.
 
 Within each valid rolling window:
 
 1. turns are represented as nodes,
-2. cosine similarity defines weighted relations between turns,
+2. cosine similarity defines weighted relations,
 3. the graph is sparsified using k-nearest-neighbour connectivity,
 4. a normalized graph Laplacian is constructed,
 5. spectral features and weighted-degree statistics summarize graph organization.
 
-This produces a structural feature vector
+This produces a structural feature vector:
 
 $$
 \Pi(G_t)
 $$
 
-The framework compares consecutive graph representations and converts their distance into a structural persistence measure:
+TIE–Dialog compares consecutive graph summaries and converts their distance into:
 
 $$
 C_{\mathrm{inv}}(t)
@@ -186,64 +230,150 @@ $$
 
 Interpretation:
 
-- **high $C_{\mathrm{inv}}$** → relatively persistent rolling graph organization,
-- **low $C_{\mathrm{inv}}$** → stronger change in that organization.
+- **high $C_{\mathrm{inv}}$** → relatively persistent rolling graph organization
+- **low $C_{\mathrm{inv}}$** → stronger change in that organization
 
-$C_{\mathrm{inv}}$ should not be described as independent of semantics: its graphs are constructed from embedding-based similarity. Its role is instead to provide a **structural description of the representation that differs from direct contextual similarity measures such as $C_t$**.
+$C_{\mathrm{inv}}$ is not independent of semantics: the graph itself is built from embedding similarities. Its role is to provide a **relational / structural description** that differs from direct contextual continuity.
 
-Because $C_{\mathrm{inv}}$ requires a complete rolling window, early turns may be undefined (`NaN`) until enough observations are available.
+Because $C_{\mathrm{inv}}$ requires two consecutive complete rolling graph summaries, early turns are undefined until enough observations are available.
+
+For a graph window of size $W$, the first finite $C_{\mathrm{inv}}$ can appear at zero-indexed turn $t=W$.
 
 ---
 
-# 🔹 Rₜ — Structural Reconfiguration
+# 🔹 $R_t$ — Structural Instability
 
-The second continuous state dimension is defined as
+The second primary coordinate is:
 
 $$
-R_t = 1 - C_{\mathrm{inv}}(t)
+R_t = 1-C_{\mathrm{inv}}(t)
 $$
 
 Therefore:
 
-- **low $R_t$** → relatively persistent local graph structure,
-- **high $R_t$** → stronger structural reconfiguration.
+- **low $R_t$** → relatively persistent local graph organization
+- **high $R_t$** → greater structural instability / lower persistence
 
-$R_t$ describes change in local relational organization, rather than simple turn-to-turn semantic displacement.
+As with $S_t$, $R_t$ is a **state level**, not an event label.
+
+Directional structural change is represented more directly by:
+
+$$
+\Delta R_t = R_t-R_{t-1}
+$$
 
 ---
 
-# 🔹 IC–III — Geometric Conversational Dynamics
+# 🔹 IC–III — Causal Geometric Conversational Dynamics
 
 The IC–III layer treats the sequence of turn embeddings as a trajectory through representation space.
 
-It extracts several local geometric descriptors.
+The current primary geometric observables are deliberately kept separate:
 
-## Local displacement — dᵢ
+$$
+d_t,\qquad \kappa_t,\qquad u_t
+$$
 
-For consecutive normalized turn embeddings, the current implementation uses cosine-based displacement:
+They are computed causally: the value at turn $t$ uses only information available at or before $t$.
 
-$$d_i(t)=\frac{1-\cos\!\left(E_t,E_{t-1}\right)}{2}$$
+No centered future-turn window, future-derived threshold, or dialogue-wise calibration is applied to these primary geometric coordinates.
 
-This quantity is subsequently smoothed and normalized within the dialogue.
+---
+
+## Local angular displacement — $d_t$
+
+Let $E_t$ and $E_{t-1}$ be unit-normalized consecutive turn embeddings.
+
+TIE–Dialog computes:
+
+$$
+d_t =
+\frac{
+\arccos\left(
+\frac{
+E_t\cdot E_{t-1}
+}{
+\|E_t\|\|E_{t-1}\|
+}
+\right)
+}{\pi}
+$$
+
+so that:
+
+$$
+d_t \in [0,1]
+$$
 
 Interpretation:
 
-- **low $d_i$** → little semantic movement between consecutive turns,
-- **high $d_i$** → stronger local displacement.
+- **$d_t\approx0$** → consecutive embeddings point in very similar directions
+- **larger $d_t$** → stronger angular displacement between consecutive turns
+- **$d_t=1$** → maximally opposite directions in the normalized representation space
 
-## Curvature proxy — κᵢ
+Angular displacement is a monotonic re-expression of cosine similarity as a distance-like quantity.
 
-The current implementation uses the local change in displacement as a discrete curvature proxy:
+It does **not** introduce new information beyond cosine similarity; it expresses that relation in a form where:
 
 $$
-\kappa_i(t)
-\approx
-\left|d_i(t)-d_i(t-1)\right|
+0 = \text{minimal angular change}
 $$
 
-This should be interpreted as a **proxy for local reorientation**, not as literal differential-geometric curvature of the original embedding manifold.
+and larger values correspond to greater local displacement.
 
-## Semantic compactness — ρₜ
+---
+
+## Turning-angle curvature — $\kappa_t$
+
+Local displacement alone does not describe whether the conversational trajectory **changes direction**.
+
+Define consecutive displacement vectors:
+
+$$
+v_{t-1}=E_{t-1}-E_{t-2}
+$$
+
+and
+
+$$
+v_t=E_t-E_{t-1}
+$$
+
+TIE–Dialog computes the normalized turning angle:
+
+$$
+\kappa_t =
+\frac{
+\arccos\left(
+\frac{
+v_{t-1}\cdot v_t
+}{
+\|v_{t-1}\|\|v_t\|
+}
+\right)
+}{\pi}
+$$
+
+with:
+
+$$
+\kappa_t \in [0,1]
+$$
+
+Interpretation:
+
+- **low $\kappa_t$** → the trajectory continues in a relatively similar direction
+- **high $\kappa_t$** → the trajectory makes a stronger local turn
+
+This is a **discrete turning-angle curvature measure** in the chosen embedding space.
+
+It should not be interpreted as literal differential-geometric curvature of an underlying psychological or semantic manifold.
+
+Importantly, $\kappa_t$ measures **change in trajectory direction**, not merely change in step size.
+
+---
+
+## Semantic compactness — $\rho_t$
 
 TIE–Dialog also estimates local semantic compactness:
 
@@ -251,238 +381,350 @@ $$
 \rho_t \in [0,1]
 $$
 
-It summarizes how tightly neighboring utterance embeddings cluster within a local window.
-
-- **higher $\rho_t$** → greater local semantic concentration,
-- **lower $\rho_t$** → more dispersed local semantic organization.
-
----
-
-# 🔹 Dₜ — Geometry Driver
-
-The third continuous state dimension combines the geometric channels into a single bounded descriptor:
+Using the default configuration, $\rho_t$ is computed over a trailing local neighbourhood:
 
 $$
-D_t = f\!\left(d_i,\kappa_i,\rho_t\right)
+[t-2,\ldots,t]
 $$
 
-The current implementation gives greatest weight to displacement and curvature, with inverse compactness contributing additional information and a compactness-dependent gating term damping the driver in highly compact regions.
+The turn embeddings inside the local window are unit-normalized, and their dispersion around the local centroid is converted into a bounded compactness score.
 
 Interpretation:
 
-- **low $D_t$** → relatively limited local geometric reconfiguration,
-- **high $D_t$** → stronger local geometric change in the conversational trajectory.
+- **high $\rho_t$** → greater local semantic concentration
+- **low $\rho_t$** → greater local semantic dispersion
 
-$D_t$ is a continuous descriptive quantity, not an event probability.
-
----
-
-# 🔷 Continuous Multivariate State
-
-The central representation of the current framework is
-
-$$
-\mathbf{z}_t = \left(S_t, R_t, D_t\right)
-$$
-
-where:
-
-- **$S_t$** captures contextual / semantic drift,
-- **$R_t$** captures structural reconfiguration,
-- **$D_t$** captures geometric trajectory change.
-
-The three dimensions are deliberately kept separate.
-
-This allows TIE–Dialog to investigate whether conversational transitions are better characterized by **multivariate organization** than by a single composite score.
+Short conversational contributions are retained by default rather than filtered out.
 
 ---
 
-# 🔷 Cross-Dimensional Dynamics
+# 🔹 $u_t$ — Local Semantic Dispersion
 
-The current version of TIE–Dialog includes a dedicated continuous cross-dimensional analysis layer.
-
-Importantly, this module uses only **$S_t$, $R_t$, and $D_t$**. Event-oriented variables such as semantic drop, structural drop, strong-event score, or transition pressure are excluded from this analysis.
-
-## First differences
-
-Turn-to-turn changes are defined as
+The fifth primary coordinate is:
 
 $$
-\Delta S_t = S_t - S_{t-1}
+u_t = 1-\rho_t
 $$
 
-$$
-\Delta R_t = R_t - R_{t-1}
-$$
+Therefore:
 
-$$
-\Delta D_t = D_t - D_{t-1}
-$$
+- **low $u_t$** → locally compact semantic organization
+- **high $u_t$** → greater local semantic dispersion
 
-A difference is only defined when both consecutive observations are available.
-
-These signals describe **movement along each individual dimension**.
+Using $u_t$ aligns its direction with the other primary coordinates: larger values correspond to greater discontinuity, instability, displacement, turning, or dispersion.
 
 ---
 
-## Multivariate change magnitude — Jₜ
+# 🔷 Primary Five-Dimensional State
 
-TIE–Dialog measures the total one-turn movement of the complete 3D state as
+The primary computational representation is now:
 
-$$J_t=\frac{\sqrt{(\Delta S_t)^2+(\Delta R_t)^2+(\Delta D_t)^2}}{\sqrt{3}}$$
+$$
+\boxed{
+\mathbf{z}_t=
+\left(
+S_t,
+R_t,
+d_t,
+\kappa_t,
+u_t
+\right)
+}
+$$
 
-Since each state dimension is bounded to $[0,1]$, division by $\sqrt{3}$ normalizes the maximum possible raw step to 1.
+The five coordinates are intentionally **not collapsed into a single transition score**.
+
+This allows TIE–Dialog to test whether conversational transitions are associated with:
+
+- one coordinate,
+- several coordinates acting together,
+- characteristic dissociations,
+- recurrent temporal sequences,
+- or multiple families of multivariate organization.
+
+The current framework therefore does not assume that all dimensions should rise together during a transition.
+
+A transition may, for example, involve:
+
+$$
+d_t\uparrow,\quad
+\kappa_t\uparrow
+$$
+
+without a comparable rise in $R_t$, or it may primarily involve structural instability with little local angular displacement.
+
+Such dissociations are treated as potentially informative rather than as failures of a composite score.
+
+---
+
+# 🔷 First Differences
+
+Turn-to-turn changes are computed separately for all five primary coordinates:
+
+$$
+\Delta S_t=S_t-S_{t-1}
+$$
+
+$$
+\Delta R_t=R_t-R_{t-1}
+$$
+
+$$
+\Delta d_t=d_t-d_{t-1}
+$$
+
+$$
+\Delta \kappa_t=\kappa_t-\kappa_{t-1}
+$$
+
+$$
+\Delta u_t=u_t-u_{t-1}
+$$
+
+A difference is defined only when both consecutive observations are finite.
+
+These signals describe **directional movement** along each coordinate and are central to the current Research Tutorial analysis.
+
+---
+
+# 🔷 Multivariate Movement Magnitude — $J_t$
+
+TIE–Dialog also computes a secondary summary of total one-turn movement in the complete five-dimensional state:
+
+$$
+J_t=
+\frac{
+\sqrt{
+(\Delta S_t)^2+
+(\Delta R_t)^2+
+(\Delta d_t)^2+
+(\Delta \kappa_t)^2+
+(\Delta u_t)^2
+}
+}{
+\sqrt{5}
+}
+$$
+
+Since each coordinate is bounded to $[0,1]$, division by $\sqrt{5}$ bounds the maximum possible raw step to 1.
 
 Interpretation:
 
-- **$J_t$ ≈ 0** → little joint state movement,
-- **larger $J_t$** → stronger multivariate change.
+- **$J_t\approx0$** → little complete-state movement
+- **larger $J_t$** → stronger total multivariate movement
 
-$J_t$ measures **magnitude**, not direction.
+However:
 
-It is not a transition probability.
+> **$J_t$ is a secondary movement descriptor, not a transition detector.**
 
----
+Equal numerical scaling does not establish that all five coordinates have equal reliability, equal psychological meaning, or membership in one latent construct.
 
-## Direction of state movement
-
-For valid non-zero movements, TIE–Dialog also computes the unit direction components
-
-$$\widehat{\Delta \mathbf{z}}_t=\frac{\Delta \mathbf{z}_t}{\left\|\Delta \mathbf{z}_t\right\|_2}=\left(\frac{\Delta S_t}{\left\|\Delta\mathbf{z}_t\right\|_2},\frac{\Delta R_t}{\left\|\Delta \mathbf{z}_t\right\|_2},\frac{\Delta D_t}{\left\|\Delta\mathbf{z}_t\right\|_2}\right)$$
-
-These values describe **which dimensions contribute to the direction of the current multivariate movement**, independently of its overall magnitude.
+The primary interpretation should therefore remain component-wise.
 
 ---
 
-# 🔷 Local Dependence Among State Levels
+# 🔷 Direction and Composition of Multivariate Movement
 
-The framework estimates trailing-window Pearson correlations among the continuous dimensions:
+For every valid non-zero step, TIE–Dialog computes the unit direction:
 
 $$
-r_{SR}(t),\qquad r_{SD}(t),\qquad r_{RD}(t)
+\widehat{\Delta\mathbf{z}}_t
+=
+\frac{
+\Delta\mathbf{z}_t
+}{
+\|\Delta\mathbf{z}_t\|_2
+}
 $$
 
-The window is **trailing / causal**: the value at turn t uses only observations available up to that turn.
+This describes **where the five-dimensional state moved**, independently of how far it moved.
 
-Interpretation within a local window:
+TIE–Dialog also computes squared-change contribution shares:
 
-- **$r > 0$** → the two dimensions tend to vary in the same direction,
-- **$r < 0$** → they tend to vary in opposite directions,
-- **$r \approx 0$** → weak local linear association.
+$$
+C_j(t)=
+\frac{
+(\Delta z_{j,t})^2
+}{
+\sum_k(\Delta z_{k,t})^2
+}
+$$
 
-These curves represent a **time-varying local dependence structure** rather than one global correlation for the entire conversation.
+for:
 
-Missing observations are ignored pairwise, and a minimum number of finite pairs is required before a rolling correlation is reported.
+$$
+j\in\{S,R,d,\kappa,u\}
+$$
+
+For a non-zero valid step:
+
+$$
+C_S+C_R+C_d+C_\kappa+C_u=1
+$$
+
+These shares prevent a large $J_t$ value from hiding **which coordinate actually produced the movement**.
 
 ---
 
-# 🔷 Local Dependence Among Changes
+# 🔷 Dynamic Coupling
 
-The same rolling analysis is applied to first differences:
+With five primary coordinates, there are:
+
+$$
+\binom{5}{2}=10
+$$
+
+pairwise relationships.
+
+TIE–Dialog estimates trailing-window Pearson correlations both among:
+
+- state levels,
+- and first differences.
+
+For example:
 
 $$
 r(\Delta S,\Delta R)
 $$
 
 $$
-r(\Delta S,\Delta D)
+r(\Delta S,\Delta d)
 $$
 
 $$
-r(\Delta R,\Delta D)
+r(\Delta d,\Delta\kappa)
 $$
 
-This asks a different question from correlation among levels:
+$$
+r(\Delta\kappa,\Delta u)
+$$
 
-> when one dimension changes from one turn to the next, do changes in another dimension tend to occur in the same direction, in the opposite direction, or independently within the recent local window?
+Interpretation inside a local trailing window:
 
-These are descriptive associations and do not imply causal coupling.
+- **$r>0$** → the pair tends to move in the same direction
+- **$r<0$** → the pair tends to move in opposite directions
+- **$r\approx0$** → little local linear association
+
+These correlations are descriptive and do not imply causal coupling.
 
 ---
 
-# 🔷 Dependency-Structure Reorganization — Qₜ
+# 🔷 Dependency-Structure Reorganization — $Q_t$
 
-At each valid turn, the three rolling level correlations define a local correlation structure:
+The ten rolling level correlations define the off-diagonal structure of a local:
 
-$$\mathbf{C}_t=\begin{bmatrix}1 & r_{SR}(t) & r_{SD}(t) \\r_{SR}(t) & 1 & r_{RD}(t) \\r_{SD}(t) & r_{RD}(t) & 1\end{bmatrix}$$
+$$
+5\times5
+$$
 
-TIE–Dialog then measures how much this structure changes between consecutive turns using a normalized Frobenius-distance formulation.
+correlation matrix.
 
-With
+TIE–Dialog measures how much that complete dependency structure changes between adjacent turns using a normalized Frobenius-distance formulation.
 
-$$\Delta \mathbf{r}_t=\left(\Delta r_{SR}(t),\Delta r_{SD}(t),\Delta r_{RD}(t)\right)$$
+For five dimensions:
 
-the current implementation computes
-
-$$Q_t=\frac{\sqrt{2\left[(\Delta r_{SR})^2+(\Delta r_{SD})^2+(\Delta r_{RD})^2\right]}}{\sqrt{24}}$$
+$$
+Q_t=
+\frac{
+\sqrt{
+2\sum_{i<j}
+\left[
+r_{ij}(t)-r_{ij}(t-1)
+\right]^2
+}
+}{
+\sqrt{80}
+}
+$$
 
 Interpretation:
 
-- **$Q_t$ ≈ 0** → the local dependency structure changed very little,
-- **larger $Q_t$** → stronger reorganization of the relationships among S, R, and D.
+- **$Q_t\approx0$** → little change in the local dependency structure
+- **larger $Q_t$** → stronger reorganization of relationships among the five coordinates
 
-$Q_t$ therefore measures **change in multivariate organization**, rather than the value or change of any single dimension.
+$Q_t$ is a **second-order exploratory descriptor**.
 
-It is not an event probability.
+It is not a primary transition metric or an event probability.
 
 ---
 
 # 🔷 Lead–Lag Analysis
 
-TIE–Dialog computes lagged Pearson associations for each pair of dimensions across a user-defined range of turn offsets.
+The current lead–lag analysis is performed on **first differences**.
 
-The convention is:
+For every one of the ten dimension pairs, TIE–Dialog computes lagged Pearson associations across a user-defined range.
 
-- **$\mathrm{lag} > 0$** → the first named dimension leads the second,
-- **$\mathrm{lag} < 0$** → the second leads the first,
-- **$\mathrm{lag} = 0$** → synchronous association.
+Convention:
 
-Lead–lag analysis is computed for both:
+- **lag $>0$** → the first named change leads the second
+- **lag $<0$** → the second leads the first
+- **lag $=0$** → synchronous association
 
-- continuous state levels,
-- and first differences.
+Because selecting the strongest lag retrospectively is statistically optimistic, TIE–Dialog evaluates the observed:
 
-The strongest lag is summarized by absolute correlation together with the number of valid paired observations.
+$$
+\max_{\ell}|r_\ell|
+$$
 
-These results are **descriptive temporal associations**. They do not establish causal influence.
+against a **circular-shift max-over-lags null**.
+
+The resulting `p_max_over_lags` therefore controls the search across candidate lags **within each pair**.
+
+Because ten pairwise lead–lag tests are performed, the app additionally reports a **Holm-adjusted**:
+
+```text
+p_holm
+```
+
+to control family-wise error across the ten dimension pairs.
+
+Even with these corrections, lead–lag remains a **descriptive temporal association**, not a causal estimator.
+
+Different coordinates also have different intrinsic temporal response properties, so proposed temporal sequences should be checked against synthetic latency calibration before being interpreted mechanistically.
 
 ---
 
-# 🔷 Phase-Space Views
+# 🔹 Exploratory Geometry Summary — $D_t$
 
-The continuous state can also be visualized in pairwise phase spaces:
+The current version retains a scalar geometry summary only for legacy / exploratory diagnostics:
 
 $$
-(S_t,R_t),\qquad (S_t,D_t),\qquad (R_t,D_t)
+D_t^{\mathrm{exploratory}}
+=
+\sqrt{
+\frac{
+d_t^2+\kappa_t^2+u_t^2
+}{3}
+}
 $$
 
-Successive turns form trajectories through these spaces.
+This equal-weight RMS summary is **not** part of the primary state:
 
-These plots are useful for inspecting:
+$$
+\mathbf{z}_t\neq(S_t,R_t,D_t)
+$$
 
-- recurrent configurations,
-- excursions from locally stable regions,
-- large joint movements,
-- trajectory loops,
-- and possible shifts between conversational regimes.
+and is **not passed into the primary cross-dimensional analysis**.
 
-Unlike the correlation plots, phase-space views preserve the **actual joint state trajectory** rather than reducing it to a dependence coefficient.
+Its purpose is backwards compatibility and exploratory inspection.
+
+The framework does not currently claim that angular displacement, curvature, and semantic dispersion form a validated one-dimensional latent construct.
 
 ---
 
 # 🔹 Operational Event Diagnostics
 
-TIE–Dialog retains an event-oriented layer alongside the continuous-state analysis.
+TIE–Dialog retains a legacy / operational event-oriented layer alongside the primary continuous analysis.
 
 Derived event signals include:
 
 - semantic disruption,
 - structural disruption,
-- geometric contribution,
+- exploratory geometric contribution,
 - composite strong-event scores,
 - and transition-pressure-style diagnostics.
 
-Operational labels currently include:
+Operational labels include:
 
 | Label | Computational interpretation |
 |---|---|
@@ -491,23 +733,25 @@ Operational labels currently include:
 | **STRUCT_RECONFIG** | structural disruption with sufficient geometric contribution |
 | **BREAKDOWN** | strong multi-signal disruption |
 
-These regions are **derived diagnostics**. They are not identical to the continuous variables $S_t$ or $R_t$, and they should not be treated as ground-truth psychological states.
+These labels are **secondary computational diagnostics**.
 
-The main interface can overlay these operational regions on the coherence trajectory for exploratory inspection.
+They are not identical to the primary coordinates $S_t$, $R_t$, $d_t$, $\kappa_t$, or $u_t$, and they should not be treated as ground-truth psychological states.
+
+The Research Tutorial analysis does **not** use these legacy event labels as its primary definition of conversational transition.
 
 ---
 
 # 🔹 Φ Thresholds and Simplified Regime Views
 
-The app also retains percentile-based Φ thresholds and simplified public regime visualizations derived from coherence.
+The app retains percentile-based $\Phi$ thresholds and simplified regime visualizations derived from coherence.
 
-These are useful for compact visualization of relatively stable and disrupted regions, but they are not the central representation used by the current cross-dimensional analysis.
+These remain useful for exploratory visualization of relatively stable and disrupted regions, but they are not the central representation used in the current multicomponent analysis.
 
 Thresholds are dialogue-dependent operational estimates rather than universal constants.
 
 ---
 
-# 🔹 Participant Trajectories — Cᵢ
+# 🔹 Participant Trajectories — $C_i$
 
 TIE–Dialog can estimate participant-specific coherence trajectories.
 
@@ -521,67 +765,63 @@ These views support exploratory analysis of:
 - alignment asymmetries,
 - and possible stabilizing or destabilizing patterns.
 
-Participant trajectories are descriptive computational representations and should not be interpreted as direct psychological measurements.
+Participant trajectories are computational descriptions, not direct psychological measurements.
 
 ---
 
 # 🧪 Validation and Robustness Framework
 
-TIE–Dialog contains several diagnostic layers for testing how dependent its outputs are on particular modeling choices.
+TIE–Dialog includes several diagnostic layers for testing how dependent its outputs are on modeling choices.
 
 ## Embedding comparison
 
-The same dialogue can be processed using multiple embedding systems while keeping the remaining parameters fixed.
+The same dialogue can be processed using multiple representation systems while keeping the remaining pipeline fixed.
 
-The comparison includes:
+The comparison can include:
 
 - per-embedding summary statistics,
-- overlaid coherence trajectories,
+- trajectory overlays,
 - pairwise trajectory correlations,
-- DTW-based trajectory similarity,
+- DTW-based similarity,
 - event-score similarity,
 - event-region alignment,
 - shuffled-order comparison,
 - and variance decomposition across representation model and dialogue structure.
 
-Agreement across embeddings should be interpreted as **representational robustness**, not as proof of human validity.
+Agreement across embeddings demonstrates **representational stability**, not human validity.
 
 ---
 
-## Baseline comparison / Added Structural Value
+## Baseline comparison
 
-The app compares richer TIE–Dialog outputs against simpler baselines such as:
+The app compares richer TIE–Dialog outputs with simpler baselines such as:
 
 - turn-to-turn cosine disruption,
 - moving-context cosine disruption,
 - geometric displacement,
 - and randomized shuffled-order controls.
 
-These diagnostics ask whether the richer representation is reducible to simpler local similarity measures, both globally and at the level of event reconstruction.
+These diagnostics ask whether richer computational structure adds information beyond simpler similarity measures.
 
-Low reducibility can indicate added trajectory-dependent structure, but it does not by itself establish that this structure corresponds to human-perceived conversational transitions.
+Low reducibility does not by itself demonstrate correspondence with human-perceived transitions.
 
 ---
 
 ## Shuffled-order controls
 
-Randomized controls disrupt the temporal order of the dialogue while preserving the utterance set.
+Randomized controls disrupt conversational order while preserving the utterance set.
 
-They are used to test whether observed coherence or event organization depends on sequential structure rather than on utterance content alone.
-
-The framework can compare event-location overlap and displacement between the original and shuffled dialogue.
+They are used to test whether observed organization depends on temporal sequencing rather than only on the collection of utterance contents.
 
 ---
 
 ## Ablation diagnostics
 
-TIE–Dialog supports component ablations such as:
+TIE–Dialog retains component-ablation diagnostics for the legacy event layer and related robustness analyses.
 
-- removal of the structural channel,
-- removal of the geometric channel,
-- contextual-coherence-only configurations.
+These tests can examine how contextual, structural, and geometric components affect operational event reconstruction.
 
-These tests examine how much each computational layer contributes to composite event reconstruction.
+They should not be confused with the primary five-dimensional state, whose coordinates are deliberately analyzed separately.
 
 ---
 
@@ -589,57 +829,69 @@ These tests examine how much each computational layer contributes to composite e
 
 The app can perturb key parameters while keeping the embedding representation fixed.
 
-The robustness analysis summarizes changes in:
+Robustness analyses summarize changes in:
 
 - coherence trajectories,
 - DTW similarity,
 - event masks,
-- and parameter movement across repeated perturbed runs.
+- and outputs across repeated perturbed runs.
 
-This provides a sensitivity analysis of the framework rather than assuming that one parameter configuration is uniquely correct.
+This provides sensitivity analysis rather than assuming that one parameter configuration is uniquely correct.
 
 ---
 
 # 🧪 Batch Validation Modes
 
-The current interface supports:
+The interface supports:
 
-- **single-dialogue analysis**,
-- **embedding batch validation**,
-- **hyperparameter batch robustness**.
+- **single-dialogue analysis**
+- **embedding batch validation**
+- **hyperparameter batch robustness**
 
-These modes make it possible to distinguish three different questions:
+These modes address different questions:
 
 1. What dynamics appear in one conversation?
 2. Which patterns survive changes in semantic representation?
-3. Which patterns survive reasonable changes in model parameters?
+3. Which patterns survive reasonable parameter perturbations?
 
 ---
 
 # 📤 Outputs
 
-TIE–Dialog can export turn-level results containing core and derived variables such as:
+Turn-level results can include:
 
 - `Ct`
-- $C_{\mathrm{inv}}$
+- `C_inv`
 - `S_t`
 - `R_t`
-- `D_t`
+- `d_t`
+- `kappa_t`
+- `rho_t`
+- `u_t`
 - `dS_t`
 - `dR_t`
-- `dD_t`
+- `dd_t`
+- `dkappa_t`
+- `du_t`
 - `J_t`
+- `J_share_S`
+- `J_share_R`
+- `J_share_d`
+- `J_share_kappa`
+- `J_share_u`
 - movement-direction components
-- rolling level correlations
-- rolling change correlations
+- rolling pairwise correlations
 - `Q_t`
+- lead–lag summaries
+- `p_max_over_lags`
+- `p_holm`
 - IC–II auxiliary signals
-- IC–III geometric descriptors
 - participant trajectories
 - operational event labels
-- and additional diagnostics where enabled.
+- `D_t_exploratory`
+- and additional diagnostics where enabled
 
-The app also provides downloadable CSV outputs and PDF reports.
+The app also provides downloadable CSV outputs, HTML plots, and PDF reports.
 
 ---
 
@@ -649,7 +901,9 @@ TIE–Dialog can generate analysis reports containing items such as:
 
 - run configuration,
 - coherence dynamics,
-- core computational summaries,
+- the five-dimensional primary state,
+- geometric observables,
+- multivariate movement summaries,
 - embedding robustness tables,
 - baseline comparisons,
 - shuffled-order diagnostics,
@@ -662,33 +916,40 @@ The report system is intended to make individual runs easier to inspect, archive
 
 # 🔬 Current Research Direction
 
-The current research direction of TIE–Dialog is broader than simple event detection.
+The current Research Tutorial direction is **not** to build another scalar transition detector.
 
-The framework is being used to investigate whether **human-perceived conversational transitions are associated with reproducible multivariate dynamical signatures**.
+The primary question is whether human-perceived conversational transitions are associated with **reproducible multicomponent temporal structure**.
 
-A central question is:
+A central formulation is:
 
-> **Do the temporal relationships among contextual drift, structural reconfiguration, and conversational geometry reorganize systematically around transitions perceived by human observers?**
+> **Do regions of high collective human transition judgment exhibit recurrent multivariate temporal signatures across contextual discontinuity, structural instability, angular displacement, trajectory curvature, and local semantic dispersion?**
 
-This reframes the problem from
+Equivalently:
 
-> “Which single score detects a transition?”
+$$
+H_t
+\quad\text{vs.}\quad
+\mathbf{z}_t=
+(S_t,R_t,d_t,\kappa_t,u_t)
+$$
 
-into
-
-> “Does the conversational system exhibit a reproducible change in multivariate organization around perceived transitions?”
+where the human signal remains an **external validation target** rather than being used to construct the computational coordinates.
 
 Candidate signatures may involve:
 
-- coordinated movement across S, R, and D,
-- unusually large multivariate steps,
-- characteristic movement directions,
-- changing correlation structure,
-- local dependency reorganization,
+- coordinate-specific changes,
+- recurrent combinations of changes,
+- dissociations among dimensions,
+- unusually large multivariate movement,
+- characteristic movement composition,
+- changes in local coupling,
+- reorganization of dependency structure,
 - lead–lag sequences,
-- or recurrent trajectories through state space.
+- or multiple recurrent families of transition dynamics.
 
-These are **empirical hypotheses to be tested**, not assumptions built into the framework.
+These are **empirical hypotheses**, not assumptions built into the framework.
+
+A pattern only becomes scientifically informative if it is distinguishable from appropriate control regions and generalizes beyond the particular dialogue in which it was discovered.
 
 ---
 
@@ -701,9 +962,10 @@ TIE–Dialog is designed for exploratory and methodological research involving:
 - computational linguistics,
 - dialogue systems,
 - human–AI interaction,
-- semantic drift,
-- structural reorganization,
 - conversational transition analysis,
+- semantic trajectory analysis,
+- structural reorganization,
+- representation-space geometry,
 - interaction dynamics,
 - representational robustness,
 - and multivariate temporal organization.
@@ -714,22 +976,24 @@ At its current stage, TIE–Dialog should be understood as **research software**
 
 # 🧠 Conceptual Position
 
-TIE–Dialog treats conversational organization as fundamentally temporal and multivariate.
-
-Its current computational progression is:
+The current computational progression is:
 
 ```text
 utterances
 → embeddings
-→ contextual / structural / geometric signals
-→ z_t = (S_t, R_t, D_t)
-→ multivariate dynamics
-→ empirical validation
+→ contextual continuity C_t
+→ structural persistence C_inv
+→ geometric observables d_t, κ_t, ρ_t
+→ primary state z_t = (S_t, R_t, d_t, κ_t, u_t)
+→ component-wise change and multivariate dynamics
+→ external human validation
 ```
 
-The framework therefore focuses not only on **what utterances represent**, but also on **how conversational organization changes through time**.
+A key methodological principle is:
 
-A key methodological principle of the current version is that conversational transitions should not be assumed in advance to correspond to one scalar variable. Instead, TIE–Dialog makes several candidate dimensions measurable and allows their relationships to be examined empirically.
+> **Measure candidate dimensions first; establish their empirical relationships second; construct composite variables only if the evidence justifies doing so.**
+
+This is deliberately different from assuming in advance that every kind of conversational transition should correspond to one high scalar score.
 
 ---
 
@@ -739,20 +1003,29 @@ TIE–Dialog is an evolving research framework.
 
 Current limitations include:
 
-- $S_t$, $R_t$, and $D_t$ are computational operationalizations rather than established psychological constructs.
-- All embedding-derived channels depend to some extent on the chosen representation model.
-- $C_{\mathrm{inv}}$ cannot be estimated until a complete rolling structural window is available.
-- Rolling correlations can be unstable in short windows and should be interpreted locally.
-- Strong rolling correlations do not imply causal interaction.
-- Lead–lag associations are descriptive and do not establish temporal causality.
-- Dialogue-level normalization can limit direct interpretation of absolute values across datasets.
-- Event labels depend on operational rules and thresholds.
+- $S_t$, $R_t$, $d_t$, $\kappa_t$, and $u_t$ are computational operationalizations rather than established psychological constructs.
+- All embedding-derived channels depend on the chosen representation model.
+- $S_t$ and $R_t$ are currently best interpreted as **offline within-dialogue descriptors**, because $C_t$ and $C_{\mathrm{inv}}$ use dialogue-level scaling.
+- By contrast, the current $d_t$, $\kappa_t$, and $u_t$ implementations are temporally causal.
+- $C_{\mathrm{inv}}$ cannot be estimated until sufficient rolling structural context is available.
+- The five coordinates may have different intrinsic temporal response functions.
+- Apparent lead–lag structure may therefore partly reflect measurement architecture and should be checked with synthetic latency calibration.
+- Rolling correlations can be unstable in short windows.
+- Correlation and lead–lag do not establish causal interaction.
+- $J_t$ is a descriptive state-movement magnitude, not evidence that the five coordinates form one latent variable.
+- $Q_t$ is a second-order exploratory descriptor.
+- The exploratory $D_t$ summary is not a validated geometry construct.
+- Event labels depend on operational rules and thresholds and are retained as secondary diagnostics.
 - Parameter choices can affect event-oriented outputs and some continuous trajectories.
 - Agreement across embeddings demonstrates representational stability, not necessarily human validity.
-- Shuffled controls, baselines, and ablations provide diagnostic evidence rather than definitive validation.
-- Operational transition or breakdown regions should not be treated as ground-truth psychological states.
+- Shuffled controls, baselines, ablations, and null models provide diagnostic evidence rather than definitive validation.
+- Human transition judgments are themselves temporally uncertain and should not be treated as perfectly precise ground truth.
 
-The purpose of the framework is therefore not to assume that a particular theory of conversational dynamics is correct, but to make candidate structures **measurable, inspectable, falsifiable, and empirically comparable**.
+The purpose of the framework is not to assume that a particular theory of conversational dynamics is correct.
+
+Its purpose is to make candidate computational structures:
+
+**measurable, inspectable, falsifiable, comparable, and empirically testable.**
 
 ---
 
@@ -777,5 +1050,3 @@ CITATION.cff
 ```
 
 Associated Zenodo releases, preprints, and related research outputs may also be cited where appropriate.
-
----
