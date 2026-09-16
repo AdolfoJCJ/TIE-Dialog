@@ -7,7 +7,7 @@
 👉 **Run TIE–Dialog in your browser:**  
 https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
 
-<img width="2500" height="1875" alt="TIE–Dialog interface" src="https://github.com/user-attachments/assets/2bdb0244-5b1d-49b3-bef4-09be5c9574dd" />
+<img width="1448" height="1086" alt="ChatGPT Image Sep 16, 2026 at 01_07_19 PM" src="https://github.com/user-attachments/assets/78915c18-727d-424e-9289-f2c255cb201b" />
 
 ---
 
