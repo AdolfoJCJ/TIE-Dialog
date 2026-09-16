@@ -495,13 +495,7 @@ The primary interpretation should therefore remain component-wise.
 For every valid non-zero step, TIE–Dialog computes the unit direction:
 
 $$
-\widehat{\Delta\mathbf{z}}_t
-=
-\frac{
-\Delta\mathbf{z}_t
-}{
-\|\Delta\mathbf{z}_t\|_2
-}
+\widehat{\Delta\mathbf{z}}_t=\frac{\Delta\mathbf{z}_t}{\|\Delta\mathbf{z}_t\|_2}
 $$
 
 This describes **where the five-dimensional state moved**, independently of how far it moved.
@@ -509,12 +503,7 @@ This describes **where the five-dimensional state moved**, independently of how 
 TIE–Dialog also computes squared-change contribution shares:
 
 $$
-C_j(t)=
-\frac{
-(\Delta z_{j,t})^2
-}{
-\sum_k(\Delta z_{k,t})^2
-}
+C_j(t)=\frac{(\Delta z_{j,t})^2}{\sum_k(\Delta z_{k,t})^2}
 $$
 
 for:
@@ -591,17 +580,7 @@ TIE–Dialog measures how much that complete dependency structure changes betwee
 For five dimensions:
 
 $$
-Q_t=
-\frac{
-\sqrt{
-2\sum_{i<j}
-\left[
-r_{ij}(t)-r_{ij}(t-1)
-\right]^2
-}
-}{
-\sqrt{80}
-}
+Q_t=\frac{\sqrt{2\sum_{i<j}left[r_{ij}(t)-r_{ij}(t-1)\right]^2}}{\sqrt{80}}
 $$
 
 Interpretation:
@@ -656,13 +635,7 @@ Different coordinates also have different intrinsic temporal response properties
 The current version retains a scalar geometry summary only for legacy / exploratory diagnostics:
 
 $$
-D_t^{\mathrm{exploratory}}
-=
-\sqrt{
-\frac{
-d_t^2+\kappa_t^2+u_t^2
-}{3}
-}
+D_t^{\mathrm{exploratory}}=\sqrt{\frac{d_t^2+\kappa_t^2+u_t^2}{3}}
 $$
 
 This equal-weight RMS summary is **not** part of the primary state:
