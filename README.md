@@ -269,10 +269,6 @@ $$
 d_t,\qquad \kappa_t,\qquad u_t
 $$
 
-They are computed causally: the value at turn $t$ uses only information available at or before $t$.
-
-No centered future-turn window, future-derived threshold, or dialogue-wise calibration is applied to these primary geometric coordinates.
-
 ---
 
 ## Local angular displacement — $d_t$
@@ -368,30 +364,6 @@ Importantly, $\kappa_t$ measures **change in trajectory direction**, not merely 
 
 ---
 
-## Semantic compactness — $\rho_t$
-
-TIE–Dialog also estimates local semantic compactness:
-
-$$
-\rho_t \in [0,1]
-$$
-
-Using the default configuration, $\rho_t$ is computed over a trailing local neighbourhood:
-
-$$
-[t-2,\ldots,t]
-$$
-
-The turn embeddings inside the local window are unit-normalized, and their dispersion around the local centroid is converted into a bounded compactness score.
-
-Interpretation:
-
-- **high $\rho_t$** → greater local semantic concentration
-- **low $\rho_t$** → greater local semantic dispersion
-
-Short conversational contributions are retained by default rather than filtered out.
-
----
 
 # 🔹 $u_t$ — Local Semantic Dispersion
 
