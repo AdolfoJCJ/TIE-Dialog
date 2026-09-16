@@ -38,11 +38,6 @@ where:
 - **$\kappa_t$** — turning-angle curvature of the embedding trajectory
 - **$u_t$** — local semantic dispersion
 
-A central methodological principle of the current version is:
-
-> **Do not collapse distinct computational signals into a single transition score before their relationships have been empirically established.**
-
-This is why the former composite **Geometry Driver $D_t$** is no longer part of the primary Research Tutorial state. It is retained only as an **exploratory / backwards-compatible diagnostic summary**.
 
 TIE–Dialog analyzes:
 
