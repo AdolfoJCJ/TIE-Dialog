@@ -567,21 +567,15 @@ These correlations are descriptive and do not imply causal coupling.
 
 # 🔷 Dependency-Structure Reorganization — $Q_t$
 
-The ten rolling level correlations define the off-diagonal structure of a local:
+The ten pairwise rolling correlations define the off-diagonal structure of a local $5\times5$ correlation matrix.
+
+TIE–Dialog measures how much this dependency structure changes between adjacent turns using a normalized Frobenius-distance formulation:
 
 $$
-5\times5
+Q_t=\frac{\sqrt{2\sum_{i<j}\left[r_{ij}(t)-r_{ij}(t-1)\right]^2}}{\sqrt{80}}
 $$
 
-correlation matrix.
-
-TIE–Dialog measures how much that complete dependency structure changes between adjacent turns using a normalized Frobenius-distance formulation.
-
-For five dimensions:
-
-$$
-Q_t=\frac{\sqrt{2\sum_{i<j}left[r_{ij}(t)-r_{ij}(t-1)\right]^2}}{\sqrt{80}}
-$$
+The denominator $\sqrt{80}$ provides a fixed theoretical normalization based on the element-wise range of the ten unique correlations.
 
 Interpretation:
 
