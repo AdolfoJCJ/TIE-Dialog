@@ -706,45 +706,6 @@ It is not a primary transition metric or an event probability.
 
 ---
 
-# 🔷 Lead–Lag Analysis
-
-The current lead–lag analysis is performed on **first differences**.
-
-For every one of the ten dimension pairs, TIE–Dialog computes lagged Pearson associations across a user-defined range.
-
-Convention:
-
-* **lag $>0$** → the first named change leads the second
-* **lag $<0$** → the second leads the first
-* **lag $=0$** → synchronous association
-
-Because selecting the strongest lag retrospectively is statistically optimistic, TIE–Dialog evaluates:
-
-$$
-\max_{\ell}|r_\ell|
-$$
-
-against a **circular-shift max-over-lags null**.
-
-The resulting:
-
-p_max_over_lags
-
-
-controls the search across candidate lags **within each pair**.
-
-Because ten pairwise lead–lag tests are performed, the app additionally reports a Holm-adjusted:
-
-p_holm
-
-to control family-wise error across the ten dimension pairs.
-
-Even with these corrections, lead–lag remains a **descriptive temporal association**, not a causal estimator.
-
-Different coordinates may also have different intrinsic temporal response properties, so proposed temporal sequences should be checked against synthetic latency calibration before being interpreted mechanistically.
-
----
-
 # 🔹 Exploratory Geometry Summary — $D_t$
 
 The current version retains a scalar geometry summary only for legacy / exploratory diagnostics:
