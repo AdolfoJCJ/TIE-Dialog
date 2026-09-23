@@ -67,9 +67,7 @@ TIE–Dialog accepts `.csv` or `.xlsx` dialogue files.
 ## Required columns
 
 
-turn
-participant
-text
+turn-participant-text
 
 ## Optional column
 
