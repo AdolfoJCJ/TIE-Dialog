@@ -40,7 +40,6 @@ TIE–Dialog analyzes:
 - reorganization in the composition of multivariate change,
 - time-varying dependence among dimensions,
 - change in the full dependency structure,
-- lead–lag associations among first differences,
 - operational event diagnostics,
 - participant-level coherence trajectories,
 - and robustness across representations and parameter settings.
@@ -49,10 +48,10 @@ TIE–Dialog analyzes:
 
 # 🚀 Quickstart
 
-```bash
+bash
 pip install -r requirements.txt
 streamlit run app.py
-````
+
 
 The app provides two main usage styles:
 
