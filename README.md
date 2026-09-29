@@ -13,14 +13,19 @@ https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
 
 ## Overview
 
-**TIE–Dialog** is a Streamlit-based research framework for representing and analyzing dialogue as a **continuous, evolving multicomponent system**.
+**TIE–Dialog** is a Streamlit-based research framework for representing and
+analyzing dialogue as a **continuous, evolving multicomponent system**.
 
-Rather than treating conversation as a sequence of isolated utterances, or assuming that conversational change can be captured by one transition score, TIE–Dialog keeps several computational observables separate and examines how they evolve, dissociate, and interact over time.
+Rather than treating conversation as a sequence of isolated utterances, or
+assuming that conversational change can be captured by a single transition
+score, TIE–Dialog keeps several computational observables separate and examines
+how they evolve, dissociate, and interact over time.
 
-The current primary state is five-dimensional:
+The **current implementation** represents the primary computational state as
+five-dimensional:
 
 $$
-\mathbf{z}_t =\left(S_t,R_t,d_t,\kappa_t,u_t\right)
+\mathbf{z}_t = (S_t,R_t,d_t,\kappa_t,u_t)
 $$
 
 where:
