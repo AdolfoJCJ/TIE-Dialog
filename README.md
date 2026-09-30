@@ -41,13 +41,14 @@ TIE–Dialog analyzes:
 - the five continuous state coordinates,
 - turn-to-turn changes in each coordinate,
 - raw and variability-adjusted multivariate movement,
-- the relative contribution of each coordinate to that movement,
-- reorganization in the composition of multivariate change,
-- time-varying dependence among dimensions,
-- change in the full dependency structure,
-- operational event diagnostics,
-- participant-level coherence trajectories,
-- and robustness across representations and parameter settings.
+- the relative contribution of each coordinate to multivariate movement,
+- time-varying dependence among dimensions at both state and change levels,
+- exploratory change in the full rolling dependency structure,
+- and exploratory operational event diagnostics.
+
+The exported component shares additionally support downstream analyses of
+**compositional reorganization**, including the Total Variation and
+Jensen–Shannon divergence analyses used in the TIE–Dialog Research Tutorial.
 
 ---
 
