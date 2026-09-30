@@ -5,8 +5,7 @@
 ## 🌐 Live Demo (Hugging Face Spaces)
 
 👉 **Run CoDy in your browser:**  
-https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
-
+(https://huggingface.co/spaces/AdolfoJCJ/CoDy)
 <img width="1448" height="1086" alt="TIE–Dialog interface" src="https://github.com/user-attachments/assets/78915c18-727d-424e-9289-f2c255cb201b" />
 
 ---
