@@ -11,14 +11,27 @@ https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
 
 ---
 
+# CoDy — 📈 Conversational Dynamics Lab 📉
+
+## A multicomponent computational framework for conversational dynamics
+
+## 🌐 Live Demo (Hugging Face Spaces)
+
+👉 **Run CoDy in your browser:**  
+https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
+
+<img width="1448" height="1086" alt="CoDy interface" src="https://github.com/user-attachments/assets/78915c18-727d-424e-9289-f2c255cb201b" />
+
+---
+
 ## Overview
 
-**TIE–Dialog** is a Streamlit-based research framework for representing and
-analyzing dialogue as a **continuous, evolving multicomponent system**.
+**CoDy** is a Streamlit-based research framework for representing and
+analyzing conversation as a **continuous, evolving multicomponent system**.
 
 Rather than treating conversation as a sequence of isolated utterances, or
 assuming that conversational change can be captured by a single transition
-score, TIE–Dialog keeps several computational observables separate and examines
+score, **CoDy** keeps several computational observables separate and examines
 how they evolve, dissociate, and interact over time.
 
 The **current implementation** represents the primary computational state as
@@ -36,7 +49,7 @@ where:
 - **$\kappa_t$** — turning-angle curvature of the embedding trajectory
 - **$u_t$** — local semantic dispersion
 
-TIE–Dialog analyzes:
+**CoDy** analyzes:
 
 - the five continuous state coordinates,
 - turn-to-turn changes in each coordinate,
@@ -45,10 +58,6 @@ TIE–Dialog analyzes:
 - time-varying dependence among dimensions at both state and change levels,
 - exploratory change in the full rolling dependency structure,
 - and exploratory operational event diagnostics.
-
-The exported component shares additionally support downstream analyses of
-**compositional reorganization**, including the Total Variation and
-Jensen–Shannon divergence analyses used in the TIE–Dialog Research Tutorial.
 
 ---
 
