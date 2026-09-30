@@ -77,7 +77,7 @@ The app provides two main usage styles:
 
 # 📁 Dataset Format
 
-TIE–Dialog accepts `.csv` or `.xlsx` dialogue files.
+CoDy accepts `.csv` or `.xlsx` dialogue files.
 
 ## Required columns
 
@@ -94,7 +94,7 @@ If `turn` is missing, the app can generate turn indices automatically.
 
 # 🧩 Computational Architecture
 
-TIE–Dialog combines contextual, structural, and geometric descriptions of the same conversation.
+CoDy combines contextual, structural, and geometric descriptions of the same conversation.
 
 | Component                        | Main role                                                                                    |
 | -------------------------------- | -------------------------------------------------------------------------------------------- |
@@ -150,7 +150,7 @@ Agreement across embeddings should be interpreted as **representational robustne
 
 ## $C_t$ — contextual continuity
 
-TIE–Dialog models coherence as a **temporally evolving contextual trajectory**, rather than as a static pairwise similarity score.
+CoDy models coherence as a **temporally evolving contextual trajectory**, rather than as a static pairwise similarity score.
 
 At each turn, the current utterance embedding is evaluated relative to an evolving contextual representation containing both:
 
@@ -206,7 +206,7 @@ $S_t$ is a continuous state coordinate, not a transition probability.
 
 # 🔹 Structural Persistence — $C_{\mathrm{inv}}$
 
-TIE–Dialog characterizes local conversational organization through **rolling similarity graphs**.
+CoDy characterizes local conversational organization through **rolling similarity graphs**.
 
 Within each valid rolling window:
 
@@ -328,7 +328,7 @@ $$
 v_t=E_t-E_{t-1}
 $$
 
-TIE–Dialog computes the normalized turning angle:
+CoDy computes the normalized turning angle:
 
 $$
 \kappa_t =\frac{\arccos\left(\frac{v_{t-1}\cdot v_t}{\|v_{t-1}\|\|v_t\|}\right)}{\pi}
@@ -436,7 +436,7 @@ These signals describe **directional movement** along each coordinate.
 
 # 🔷 Raw Multivariate Movement Magnitude — $J_t$
 
-TIE–Dialog computes a secondary summary of total one-turn movement in the complete five-dimensional state:
+CoDy computes a secondary summary of total one-turn movement in the complete five-dimensional state:
 
 $$
 J_t=\frac{\sqrt{(\Delta S_t)^2+(\Delta R_t)^2+(\Delta d_t)^2+(\Delta \kappa_t)^2+(\Delta u_t)^2}}{\sqrt{5}}
@@ -623,7 +623,7 @@ Agreement across the $L1$ and $L2$ definitions should be interpreted as **robust
 
 # 🔷 Direction of Multivariate Movement
 
-For every valid non-zero raw step, TIE–Dialog can compute the unit movement direction:
+For every valid non-zero raw step, Cody can compute the unit movement direction:
 
 $$
 \widehat{\Delta\mathbf{z}}_t=\frac{\Delta\mathbf{z}_t}{\|\Delta\mathbf{z}_t\|_2}
@@ -665,7 +665,7 @@ $$
 
 pairwise relationships.
 
-TIE–Dialog estimates trailing-window Pearson correlations both among:
+CoDy estimates trailing-window Pearson correlations both among:
 
 * state levels,
 * and first differences.
@@ -702,7 +702,7 @@ These correlations are descriptive and do not imply causal coupling.
 
 The ten pairwise rolling correlations define the off-diagonal structure of a local $5\times5$ correlation matrix.
 
-TIE–Dialog measures how much this dependency structure changes between adjacent turns using a normalized Frobenius-distance formulation:
+CoDy measures how much this dependency structure changes between adjacent turns using a normalized Frobenius-distance formulation:
 
 $$
 Q_t=\frac{\sqrt{2\sum_{i<j}\left[r_{ij}(t)-r_{ij}(t-1)\right]^2}}{\sqrt{80}}
@@ -745,7 +745,7 @@ The framework does not currently claim that angular displacement, curvature, and
 
 # 🔹 Legacy / Secondary Event Diagnostics
 
-TIE–Dialog retains an operational event-oriented layer alongside the primary continuous analysis.
+CoDy retains an operational event-oriented layer alongside the primary continuous analysis.
 
 Derived event signals can include:
 
@@ -784,7 +784,7 @@ Thresholds are dialogue-dependent operational estimates rather than universal co
 
 # 🔹 Participant Trajectories — $C_i$
 
-TIE–Dialog can estimate participant-specific coherence trajectories.
+CoDy can estimate participant-specific coherence trajectories.
 
 For each participant, the app tracks how their turns align with an evolving conversational context while applying configurable temporal inertia.
 
@@ -802,11 +802,11 @@ Participant trajectories are computational descriptions, not direct psychologica
 
 # 🧪 Validation and Robustness Framework
 
-TIE–Dialog includes several diagnostic layers for testing how dependent its outputs are on modeling choices.
+CoDy includes several diagnostic layers for testing how dependent its outputs are on modeling choices.
 
 ## Embedding comparison
 
-The same dialogue can be processed using multiple representation systems while keeping the remaining pipeline fixed.
+The same conversation can be processed using multiple representation systems while keeping the remaining pipeline fixed.
 
 The comparison can include:
 
@@ -825,7 +825,7 @@ Agreement across embeddings demonstrates **representational stability**, not hum
 
 ## Baseline comparison
 
-The framework can compare richer TIE–Dialog outputs with simpler semantic and lexical baselines such as:
+The framework can compare richer CoDy outputs with simpler semantic and lexical baselines such as:
 
 * SBERT turn-to-turn distance,
 * SBERT moving-context distance,
@@ -856,7 +856,7 @@ For human-boundary analyses, dialogue-wise circular shifts can preserve the numb
 
 ## Ablation diagnostics
 
-TIE–Dialog retains component-ablation diagnostics for the legacy event layer and related robustness analyses.
+CoDy retains component-ablation diagnostics for the legacy event layer and related robustness analyses.
 
 These tests can examine how contextual, structural, and geometric components affect operational event reconstruction.
 
@@ -952,7 +952,7 @@ The app also provides downloadable CSV outputs, HTML plots, and PDF reports.
 
 # 📄 Reports
 
-TIE–Dialog can generate analysis reports containing items such as:
+CoDy can generate analysis reports containing items such as:
 
 * run configuration,
 * coherence dynamics,
@@ -1019,7 +1019,7 @@ Here, $t_0$ is the temporal anchor of a human-consensus transition region.
 
 ## Human-Consensus Criterion
 
-Human events are defined independently of TIE–Dialog.
+Human events are defined independently of CoDy.
 
 Candidate transition regions are localized using peaks in the aggregated human annotation field.
 
@@ -1329,7 +1329,7 @@ Therefore:
 * scalar reconstruction diagnostics rule out only the tested model class,
 * and stronger causal or theoretical claims require independent data.
 
-The current Research Tutorial is therefore not intended to establish that TIE–Dialog has already identified a validated universal property of conversational transitions.
+The current Research Tutorial is therefore not intended to establish that CoDy has already identified a validated universal property of conversational transitions.
 
 Its purpose is to determine whether the discovery dataset supports a phenomenon that is:
 
@@ -1351,7 +1351,7 @@ The critical independent test is:
 
 # 🎯 Research Use Cases
 
-TIE–Dialog is designed for exploratory and methodological research involving:
+CoDy is designed for exploratory and methodological research involving:
 
 * computational discourse analysis,
 * conversational dynamics,
@@ -1367,7 +1367,7 @@ TIE–Dialog is designed for exploratory and methodological research involving:
 * multivariate temporal organization,
 * and compositional reorganization of conversational change.
 
-At its current stage, TIE–Dialog should be understood as **research software**, not as a validated production system for diagnosing conversational states.
+At its current stage, CoDy should be understood as **research software**, not as a validated production system for diagnosing conversational states.
 
 ---
 
@@ -1402,7 +1402,7 @@ This differs from assuming in advance that every kind of conversational transiti
 
 # ⚠️ Scientific Status and Limitations
 
-TIE–Dialog is an evolving research framework.
+CoDy is an evolving research framework.
 
 Current limitations include:
 
@@ -1442,7 +1442,7 @@ Its purpose is to make candidate computational structures:
 
 # 📌 License
 
-TIE–Dialog is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+CoDy is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
 Modified versions deployed as network services must provide access to their corresponding source code under the terms of the license.
 
@@ -1454,7 +1454,7 @@ Copyright (C) 2026 Adolfo J. Céspedes Jiménez
 
 # 📚 Citation
 
-If you use TIE–Dialog in academic work, please cite the repository metadata provided in:
+If you use CoDy in academic work, please cite the repository metadata provided in:
 
 CITATION.cff
 
