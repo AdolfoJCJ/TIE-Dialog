@@ -10,19 +10,6 @@
 
 ---
 
-# CoDy — 📈 Conversational Dynamics Lab 📉
-
-## A multicomponent computational framework for conversational dynamics
-
-## 🌐 Live Demo (Hugging Face Spaces)
-
-👉 **Run CoDy in your browser:**  
-https://huggingface.co/spaces/AdolfoJCJ/TIE-Dialog
-
-<img width="1448" height="1086" alt="CoDy interface" src="https://github.com/user-attachments/assets/78915c18-727d-424e-9289-f2c255cb201b" />
-
----
-
 ## Overview
 
 **CoDy** is a Streamlit-based research framework for representing and
