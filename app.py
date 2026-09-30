@@ -321,7 +321,7 @@ EVENT_MIN_STRUCT_LEN = 1
 EVENT_MIN_STRONG_LEN = 1
 
 # =========================================================
-# Primary geometric observables
+# Geometric observable configuration
 # =========================================================
 GEOM_COMPACTNESS_WINDOW = 2
 
@@ -731,6 +731,38 @@ def _finite_first_difference(x: np.ndarray) -> np.ndarray:
     return d
 
 
+def _robust_change_scale(x: np.ndarray, eps: float = 1e-12) -> float:
+    """
+    Robust within-dialogue scale for a turn-to-turn change series.
+
+    Primary estimate: 1.4826 * MAD around the median, which is comparable to
+    a standard deviation under a Gaussian reference model while remaining less
+    sensitive to isolated jumps. If MAD collapses to ~0, fall back to RMS about
+    zero so constant non-zero drift remains calibratable. A completely flat
+    dimension receives scale 1.0, making its standardized changes exactly zero.
+
+    This scale is retrospective (it uses the full valid dialogue) and is therefore
+    intended for offline descriptive comparison, not causal online detection.
+    """
+    x = np.asarray(x, float)
+    vals = x[np.isfinite(x)]
+    if vals.size == 0:
+        return np.nan
+
+    med = float(np.median(vals))
+    mad = float(np.median(np.abs(vals - med)))
+    scale = 1.4826 * mad
+
+    if (not np.isfinite(scale)) or scale <= eps:
+        rms = float(np.sqrt(np.mean(vals ** 2)))
+        if np.isfinite(rms) and rms > eps:
+            scale = rms
+        else:
+            scale = 1.0
+
+    return float(scale)
+
+
 def _masked_corr(a: np.ndarray, b: np.ndarray, min_pairs: int = 4) -> float:
     """Pearson correlation using only finite paired observations."""
     a = np.asarray(a, float)
@@ -773,157 +805,6 @@ def rolling_corr_series(
     return out
 
 
-def lagged_corr_table(
-    x: np.ndarray,
-    y: np.ndarray,
-    max_lag: int = 6,
-    min_pairs: int = 6,
-) -> pd.DataFrame:
-    """
-    Lagged Pearson association.
-
-    lag > 0: first named signal leads the second by `lag` turns.
-    lag < 0: second named signal leads the first by abs(lag) turns.
-    """
-    x = np.asarray(x, float)
-    y = np.asarray(y, float)
-    n = min(x.size, y.size)
-    x = x[:n]
-    y = y[:n]
-
-    rows = []
-    m = int(max(0, max_lag))
-    for lag in range(-m, m + 1):
-        if lag > 0:
-            xa, ya = x[:-lag], y[lag:]
-        elif lag < 0:
-            k = abs(lag)
-            xa, ya = x[k:], y[:-k]
-        else:
-            xa, ya = x, y
-
-        mask = np.isfinite(xa) & np.isfinite(ya)
-        n_pairs = int(mask.sum())
-        r = _masked_corr(xa, ya, min_pairs=min_pairs) if n_pairs >= min_pairs else np.nan
-        rows.append({
-            "lag": int(lag),
-            "corr": r,
-            "abs_corr": abs(r) if np.isfinite(r) else np.nan,
-            "n_pairs": n_pairs,
-        })
-    return pd.DataFrame(rows)
-
-
-def best_lag_summary(
-    lag_df: pd.DataFrame,
-    pair_name: str,
-    representation: str,
-) -> Dict[str, object]:
-    """Return the strongest observed lag by absolute correlation."""
-    if lag_df is None or lag_df.empty:
-        return {
-            "pair": pair_name, "representation": representation,
-            "best_lag": np.nan, "corr": np.nan, "abs_corr": np.nan,
-            "n_pairs": 0,
-        }
-    valid = lag_df[np.isfinite(lag_df["corr"].to_numpy(dtype=float))].copy()
-    if valid.empty:
-        return {
-            "pair": pair_name, "representation": representation,
-            "best_lag": np.nan, "corr": np.nan, "abs_corr": np.nan,
-            "n_pairs": 0,
-        }
-    idx = valid["abs_corr"].astype(float).idxmax()
-    row = valid.loc[idx]
-    return {
-        "pair": pair_name,
-        "representation": representation,
-        "best_lag": int(row["lag"]),
-        "corr": float(row["corr"]),
-        "abs_corr": float(row["abs_corr"]),
-        "n_pairs": int(row["n_pairs"]),
-    }
-
-
-def max_over_lags_circular_null(
-    x: np.ndarray,
-    y: np.ndarray,
-    *,
-    pair_name: str,
-    representation: str,
-    max_lag: int = 6,
-    min_pairs: int = 6,
-) -> Dict[str, object]:
-    """Search-corrected best-lag statistic using a circular-shift null."""
-    x = np.asarray(x, float)
-    y = np.asarray(y, float)
-    n = min(x.size, y.size)
-    x = x[:n]
-    y = y[:n]
-
-    observed_df = lagged_corr_table(x, y, max_lag=max_lag, min_pairs=min_pairs)
-    summary = best_lag_summary(
-        observed_df, pair_name=pair_name, representation=representation
-    )
-    observed = float(summary["abs_corr"]) if np.isfinite(summary["abs_corr"]) else np.nan
-    if (n < max(4, min_pairs + 1)) or (not np.isfinite(observed)):
-        return {
-            **summary,
-            "null_method": "circular_shift_max_over_lags",
-            "null_n": 0,
-            "null_mean_max_abs_r": np.nan,
-            "null_q95_max_abs_r": np.nan,
-            "p_max_over_lags": np.nan,
-        }
-
-    null_max = []
-    for shift in range(1, n):
-        y_shift = np.roll(y, shift)
-        null_df = lagged_corr_table(
-            x, y_shift, max_lag=max_lag, min_pairs=min_pairs
-        )
-        vals = null_df["abs_corr"].to_numpy(dtype=float)
-        vals = vals[np.isfinite(vals)]
-        if vals.size:
-            null_max.append(float(np.max(vals)))
-
-    null_arr = np.asarray(null_max, float)
-    if null_arr.size == 0:
-        p_value = null_mean = null_q95 = np.nan
-    else:
-        p_value = float((1.0 + np.sum(null_arr >= observed)) / (1.0 + null_arr.size))
-        null_mean = float(np.mean(null_arr))
-        null_q95 = float(np.quantile(null_arr, 0.95))
-
-    return {
-        **summary,
-        "null_method": "circular_shift_max_over_lags",
-        "null_n": int(null_arr.size),
-        "null_mean_max_abs_r": null_mean,
-        "null_q95_max_abs_r": null_q95,
-        "p_max_over_lags": p_value,
-    }
-
-
-def _holm_adjust(p_values: Sequence[float]) -> np.ndarray:
-    """Holm family-wise adjustment, preserving NaNs."""
-    p = np.asarray(p_values, float)
-    out = np.full(p.shape, np.nan, dtype=float)
-    valid_idx = np.where(np.isfinite(p))[0]
-    if valid_idx.size == 0:
-        return out
-    pv = p[valid_idx]
-    order = np.argsort(pv)
-    m = len(pv)
-    adjusted_sorted = np.empty(m, float)
-    running = 0.0
-    for rank, pos in enumerate(order):
-        candidate = (m - rank) * pv[pos]
-        running = max(running, candidate)
-        adjusted_sorted[pos] = min(1.0, running)
-    out[valid_idx] = adjusted_sorted
-    return out
-
 
 def compute_cross_dimensional_analysis(
     S: np.ndarray,
@@ -932,15 +813,32 @@ def compute_cross_dimensional_analysis(
     kappa: np.ndarray,
     u: np.ndarray,
     rolling_window: int = 7,
-    max_lag: int = 6,
 ) -> Dict[str, object]:
     """
     Descriptive dynamics of the primary five-dimensional state
         z_t=(S_t,R_t,d_t,kappa_t,u_t).
 
-    No composite Geometry Driver enters this analysis. J_t and Q_t are secondary
-    summaries only; primary interpretation should retain the vector-valued
-    trajectories and their component-specific changes.
+    No composite Geometry Driver enters this analysis. J_t, raw informational
+    velocity v_info_t, variability-adjusted velocity v_rel_t, informational time
+    tau_info_t, and Q_t are secondary summaries only; primary interpretation
+    should retain the vector-valued trajectories and component-specific changes.
+
+    Informational time is operationalized as cumulative raw path length through
+    the fully observed five-dimensional state space:
+        v_info_t   = ||z_t - z_(t-1)||_2
+        tau_info_t = sum_s v_info_s
+
+    A second, retrospective diagnostic adjusts each component change by its own
+    robust within-dialogue variability before computing movement:
+        delta_rel_i(t) = delta_i(t) / robust_scale(delta_i)
+        v_rel_t        = sqrt(mean_i(delta_rel_i(t)^2))
+    This prevents a naturally high-variance coordinate from dominating merely
+    because it has a larger dynamic range. v_rel_t is an offline descriptive
+    diagnostic, not a causal detector. The informational clock itself remains
+    defined from the raw state-space path length.
+
+    The raw clock starts at 0 on the first turn where the complete 5D state is
+    available. No missing structural values are imputed.
     """
     dims = {
         "S": np.asarray(S, float),
@@ -970,6 +868,90 @@ def compute_cross_dimensional_analysis(
     J_raw[valid_step] = np.sqrt(energy[valid_step])
     J_t = np.full(n, np.nan, dtype=float)
     J_t[valid_step] = np.clip(J_raw[valid_step] / np.sqrt(float(len(names))), 0.0, 1.0)
+
+    # ---------------------------------------------------------
+    # Informational velocity and informational time
+    # ---------------------------------------------------------
+    # v_info_t is the raw Euclidean step length of the complete 5D state.
+    # Unlike J_t, it is not divided by sqrt(5), because tau_info_t is intended
+    # to be literal path length in the current state-space coordinates.
+    v_info_t = J_raw.copy()
+
+    # tau_info_t accumulates only a continuous run of fully observed 5D states.
+    # R_t is initially unavailable because C_inv requires a rolling graph window;
+    # informational time therefore starts at 0 on the first turn where all five
+    # coordinates are finite. Missing values are never imputed.
+    full_state_valid = np.ones(n, dtype=bool)
+    for arr in dims.values():
+        full_state_valid &= np.isfinite(arr)
+
+    tau_info_t = np.full(n, np.nan, dtype=float)
+    valid_state_idx = np.where(full_state_valid)[0]
+    if valid_state_idx.size:
+        start = int(valid_state_idx[0])
+        tau_info_t[start] = 0.0
+        running_tau = 0.0
+        for t in range(start + 1, n):
+            if not (
+                full_state_valid[t]
+                and full_state_valid[t - 1]
+                and np.isfinite(v_info_t[t])
+            ):
+                # A later gap makes cumulative path length unknowable from this
+                # point onward, so do not silently bridge or restart the clock.
+                break
+            running_tau += float(v_info_t[t])
+            tau_info_t[t] = running_tau
+
+    # ---------------------------------------------------------
+    # Variability-adjusted multivariate movement (retrospective)
+    # ---------------------------------------------------------
+    # Raw Euclidean movement can be dominated by a coordinate that simply has
+    # greater baseline variability (notably R_t in some dialogues). To separate
+    # absolute movement from relative/anomalous movement, calibrate each first
+    # difference by its own robust within-dialogue change scale.
+    # Calibrate every coordinate on the same set of fully observed 5D steps,
+    # so early turns where R_t is unavailable cannot give the other dimensions
+    # a different reference period.
+    change_scales = {
+        name: _robust_change_scale(changes[name][valid_step])
+        for name in names
+    }
+
+    standardized_changes = {
+        name: np.full(n, np.nan, dtype=float)
+        for name in names
+    }
+    for name in names:
+        scale = change_scales[name]
+        if np.isfinite(scale) and scale > 0:
+            mask = np.isfinite(changes[name])
+            standardized_changes[name][mask] = changes[name][mask] / float(scale)
+
+    valid_relative_step = np.ones(n, dtype=bool)
+    for arr in standardized_changes.values():
+        valid_relative_step &= np.isfinite(arr)
+
+    relative_energy = np.full(n, np.nan, dtype=float)
+    if n:
+        stacked_rel_sq = np.vstack([standardized_changes[name] ** 2 for name in names])
+        relative_energy[valid_relative_step] = np.sum(
+            stacked_rel_sq[:, valid_relative_step], axis=0
+        )
+
+    # RMS standardized movement: interpretable in robust within-dialogue scale
+    # units and not inflated merely by the number of dimensions.
+    v_rel_t = np.full(n, np.nan, dtype=float)
+    v_rel_t[valid_relative_step] = np.sqrt(
+        relative_energy[valid_relative_step] / float(len(names))
+    )
+
+    relative_shares = {name: np.full(n, np.nan, dtype=float) for name in names}
+    moving_rel = valid_relative_step & (relative_energy > 1e-24)
+    for name in names:
+        relative_shares[name][moving_rel] = (
+            standardized_changes[name][moving_rel] ** 2
+        ) / relative_energy[moving_rel]
 
     directions = {name: np.full(n, np.nan, dtype=float) for name in names}
     shares = {name: np.full(n, np.nan, dtype=float) for name in names}
@@ -1010,42 +992,21 @@ def compute_cross_dimensional_analysis(
             frob = np.sqrt(2.0 * np.sum(dr ** 2))
             Q_t[t] = float(np.clip(frob / frob_max, 0.0, 1.0))
 
-    min_pairs = max(5, min(8, int(rolling_window)))
-    pretty = {"S": "S", "R": "R", "d": "d", "kappa": "κ", "u": "u"}
-    lag_changes = {}
-    null_rows = []
-    for a, b, key in pairs:
-        label = f"Δ{pretty[a]}→Δ{pretty[b]}"
-        lag_changes[label] = lagged_corr_table(
-            changes[a], changes[b], max_lag=max_lag, min_pairs=min_pairs
-        )
-        null_rows.append(
-            max_over_lags_circular_null(
-                changes[a], changes[b],
-                pair_name=label,
-                representation="changes",
-                max_lag=max_lag,
-                min_pairs=min_pairs,
-            )
-        )
-
-    lag_null_summary = pd.DataFrame(null_rows)
-    if not lag_null_summary.empty and "p_max_over_lags" in lag_null_summary.columns:
-        lag_null_summary["p_holm"] = _holm_adjust(
-            lag_null_summary["p_max_over_lags"].to_numpy(dtype=float)
-        )
-
     return {
         "dimensions": dims,
         "changes": changes,
         "J_t": J_t,
+        "v_info_t": v_info_t,
+        "tau_info_t": tau_info_t,
+        "v_rel_t": v_rel_t,
+        "change_scales": change_scales,
+        "standardized_changes": standardized_changes,
+        "relative_shares": relative_shares,
         "directions": directions,
         "shares": shares,
         "rolling_level_corr": rolling_level_corr,
         "rolling_change_corr": rolling_change_corr,
         "Q_t": Q_t,
-        "lag_changes": lag_changes,
-        "lag_null_summary": lag_null_summary,
     }
 
 
@@ -1351,49 +1312,7 @@ def detect_geom_breaks(
     return out
 
 
-def match_breaks(a: List[int], b: List[int], delta_max: int = 6) -> List[Dict[str, int]]:
-    """Match indices in a to nearest indices in b within +/-delta_max."""
-    A = [int(x) for x in (a or [])]
-    B = [int(x) for x in (b or [])]
-    if not A or not B:
-        return []
-    out = []
-    for i in A:
-        cand = [(j, abs(j - i)) for j in B if abs(j - i) <= int(delta_max)]
-        if not cand:
-            continue
-        j = min(cand, key=lambda z: z[1])[0]
-        out.append({"a": int(i), "b": int(j), "lag": int(j - i)})
-    return out
 
-
-def plot_ic3_geometry(
-    d_i: np.ndarray,
-    kappa_i: np.ndarray,
-    u_t: np.ndarray,
-    height: int = 560,
-) -> go.Figure:
-    """Plot the exact three geometric coordinates used in the primary 5D state."""
-    d_plot = np.clip(np.asarray(d_i, float), 0.0, 1.0)
-    kappa_plot = np.clip(np.asarray(kappa_i, float), 0.0, 1.0)
-    u_plot = np.clip(np.asarray(u_t, float), 0.0, 1.0)
-    n = min(len(d_plot), len(kappa_plot), len(u_plot))
-    x = np.arange(1, n + 1)
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=d_plot[:n], mode="lines", name="dₜ — angular displacement"))
-    fig.add_trace(go.Scatter(x=x, y=kappa_plot[:n], mode="lines", name="κₜ — turning-angle curvature"))
-    fig.add_trace(go.Scatter(x=x, y=u_plot[:n], mode="lines", name="uₜ — local semantic dispersion (1−ρₜ)"))
-    fig.update_layout(
-        title="Primary geometric observables",
-        height=int(height),
-        margin=dict(l=40, r=260, t=45, b=40),
-        xaxis_title="Turn",
-        yaxis_title="Value (0–1)",
-        yaxis=dict(range=[0, 1]),
-        legend=dict(orientation="v", x=1.02, xanchor="left", y=1.0, yanchor="top"),
-    )
-    return fig
 
 # -------------------------------
 # Data input
@@ -1952,6 +1871,19 @@ def run_pipeline_from_embeddings(
         rho_t=signals_local["rho_t"],
     )
 
+    # Secondary movement / informational-time summaries of the same 5D state.
+    # The rolling window affects coupling/Q_t only. v_info_t and tau_info_t are
+    # raw turn-to-turn path-length quantities. v_rel_t is a retrospective, robust
+    # variability-adjusted movement diagnostic computed from the full dialogue.
+    crossdim_local = compute_cross_dimensional_analysis(
+        S=continuous_local["S_t"],
+        R=continuous_local["R_t"],
+        d=continuous_local["d_t"],
+        kappa=continuous_local["kappa_t"],
+        u=continuous_local["u_t"],
+        rolling_window=7,
+    )
+
     # Canonical event classification
     event_labels_local = classify_event_scores(
         event_scores_local,
@@ -2028,6 +1960,13 @@ def run_pipeline_from_embeddings(
         "d_t": continuous_local["d_t"],
         "kappa_t": continuous_local["kappa_t"],
         "u_t": continuous_local["u_t"],
+        "J_t": crossdim_local["J_t"],
+        "v_info_t": crossdim_local["v_info_t"],
+        "tau_info_t": crossdim_local["tau_info_t"],
+        "v_rel_t": crossdim_local["v_rel_t"],
+        "relative_shares": crossdim_local["relative_shares"],
+        "change_scales": crossdim_local["change_scales"],
+        "Q_t": crossdim_local["Q_t"],
         "D_t": signals_local["D_t"],  # exploratory legacy summary only
         "event_scores": event_scores_local,
         "event_labels": event_labels_final_local,
@@ -3043,6 +2982,8 @@ def build_pdf_report_bytes(
         "• R_t = 1 - C_inv is Structural Instability / low persistence.",
         "• d_t is angular displacement; kappa_t is turning-angle curvature.",
         "• u_t = 1 - rho_t is local semantic dispersion.",
+        "• v_info(t)=||Delta z_t||_2 is raw five-dimensional informational velocity.",
+        "• tau_info(t)=sum v_info is cumulative informational path length once the full 5D state is observed.",
         "• D_t is retained only as an exploratory legacy geometry magnitude.",
         "• C_inv (if enabled) tracks structural persistence via rolling graph invariants.",
     ]
@@ -3111,21 +3052,52 @@ def build_pdf_report_bytes(
             )
             pdf.savefig(fig); plt.close(fig)
 
-        # Primary geometric observables page
-        if ic3_df is not None and len(ic3_df) == len(turns):
-            fig = _fig_timeseries(
-                "Primary geometric observables",
-                turns,
-                [
-                    ("d_t", np.asarray(ic3_df["d_t"], float)),
-                    ("kappa_t", np.asarray(ic3_df["kappa_t"], float)),
-                    ("u_t", np.asarray(ic3_df["u_t"], float)),
-                ],
-                hlines=None,
-                vmarks=[],
-                ylim=(0.0, 1.0),
-            )
-            pdf.savefig(fig); plt.close(fig)
+
+        # Informational dynamics pages (if available).
+        if "v_info_t" in df_out.columns:
+            v_pdf = np.asarray(df_out["v_info_t"], float)
+            if np.any(np.isfinite(v_pdf)):
+                fig = plt.figure(figsize=(11.69, 8.27))
+                ax = fig.add_subplot(111)
+                ax.set_title("Informational Velocity — 5D State-Space Step Length", fontsize=14, fontweight="bold")
+                ax.plot(turns[:len(v_pdf)], v_pdf[:len(turns)], linewidth=2, label="v_info(t)")
+                ax.set_xlabel("Turn")
+                ax.set_ylabel("v_info(t) = ||Delta z_t||_2")
+                ax.set_ylim(bottom=0.0)
+                ax.grid(True, alpha=0.25)
+                ax.legend(loc="upper right", fontsize=9)
+                fig.tight_layout()
+                pdf.savefig(fig); plt.close(fig)
+
+        if "v_rel_t" in df_out.columns:
+            v_rel_pdf = np.asarray(df_out["v_rel_t"], float)
+            if np.any(np.isfinite(v_rel_pdf)):
+                fig = plt.figure(figsize=(11.69, 8.27))
+                ax = fig.add_subplot(111)
+                ax.set_title("Variability-Adjusted Multivariate Velocity", fontsize=14, fontweight="bold")
+                ax.plot(turns[:len(v_rel_pdf)], v_rel_pdf[:len(turns)], linewidth=2, label="v_rel(t)")
+                ax.set_xlabel("Turn")
+                ax.set_ylabel("v_rel(t) — robust-scale RMS movement")
+                ax.set_ylim(bottom=0.0)
+                ax.grid(True, alpha=0.25)
+                ax.legend(loc="upper right", fontsize=9)
+                fig.tight_layout()
+                pdf.savefig(fig); plt.close(fig)
+
+        if "tau_info_t" in df_out.columns:
+            tau_pdf = np.asarray(df_out["tau_info_t"], float)
+            if np.any(np.isfinite(tau_pdf)):
+                fig = plt.figure(figsize=(11.69, 8.27))
+                ax = fig.add_subplot(111)
+                ax.set_title("Informational Time — Cumulative 5D Path Length", fontsize=14, fontweight="bold")
+                ax.plot(turns[:len(tau_pdf)], tau_pdf[:len(turns)], linewidth=2, label="tau_info(t)")
+                ax.set_xlabel("Turn")
+                ax.set_ylabel("tau_info(t)")
+                ax.set_ylim(bottom=0.0)
+                ax.grid(True, alpha=0.25)
+                ax.legend(loc="upper left", fontsize=9)
+                fig.tight_layout()
+                pdf.savefig(fig); plt.close(fig)
 
         # Tables
         fig = _fig_table_page(
@@ -3321,6 +3293,19 @@ def run_batch_embedding_validation(
                         ),
                         "S_t": np.asarray(run["S_t"], dtype=float),
                         "R_t": np.asarray(run["R_t"], dtype=float),
+                        "d_t": np.asarray(run["d_t"], dtype=float),
+                        "kappa_t": np.asarray(run["kappa_t"], dtype=float),
+                        "u_t": np.asarray(run["u_t"], dtype=float),
+                        "J_t": np.asarray(run["J_t"], dtype=float),
+                        "v_info_t": np.asarray(run["v_info_t"], dtype=float),
+                        "tau_info_t": np.asarray(run["tau_info_t"], dtype=float),
+                        "v_rel_t": np.asarray(run["v_rel_t"], dtype=float),
+                        "Vrel_share_S": np.asarray(run["relative_shares"]["S"], dtype=float),
+                        "Vrel_share_R": np.asarray(run["relative_shares"]["R"], dtype=float),
+                        "Vrel_share_d": np.asarray(run["relative_shares"]["d"], dtype=float),
+                        "Vrel_share_kappa": np.asarray(run["relative_shares"]["kappa"], dtype=float),
+                        "Vrel_share_u": np.asarray(run["relative_shares"]["u"], dtype=float),
+                        "Q_t": np.asarray(run["Q_t"], dtype=float),
                         "D_t": np.asarray(run["D_t"], dtype=float),
                         "semantic_event_drop": np.asarray(
                             scores["sem_drop"],
@@ -3720,6 +3705,10 @@ with **S_t = 1 - C_t** (Contextual Discontinuity), **R_t = 1 - C_inv(t)** (Struc
 
 The framework therefore focuses on the temporal relationships among continuous conversational observables rather than imposing regime labels.
 
+As a secondary dynamical summary, TIE–Dialog also operationalizes **informational time** from movement of the complete state. Raw informational velocity is defined as **v_info(t) = ||z_t - z_(t-1)||₂**, and cumulative informational time as **τ_info(t) = Σ v_info** over the continuously observed five-dimensional trajectory. This is a path-length description of state transformation, not chronological time and not a transition detector.
+
+Because raw Euclidean movement can be dominated by a coordinate that simply varies more, the app also reports **v_rel(t)**, a retrospective variability-adjusted velocity. Each component change is divided by its robust within-dialogue change scale (1.4826 × MAD, with a safe RMS fallback), and the adjusted changes are combined as an RMS multivariate movement. This diagnostic asks whether a component is changing unusually strongly relative to its own baseline variability; it does **not** redefine τ_info and should not be used as an online causal detector.
+
 Unlike traditional approaches that focus primarily on neighbouring-turn similarity, TIE–Dialog represents conversation as a dynamic organizational process. Different conversational phenomena may therefore produce distinct organizational signatures even when local semantic similarity appears relatively stable.
 
 Internally, the framework analyses the evolving trajectory through semantic space using separate geometric observables: local angular displacement, turning-angle curvature, and local semantic dispersion. A scalar geometry summary can still be inspected for backwards compatibility, but primary inference remains component-wise so that distinct geometric behaviours are not collapsed prematurely.
@@ -4002,10 +3991,6 @@ with st.sidebar:
         crossdim_window = ui_slider(
             "Rolling dependency window",
             4, 15, 7, 1,
-        )
-        crossdim_max_lag = ui_slider(
-            "Lead–lag maximum (± turns)",
-            1, 10, 6, 1,
         )
         st.caption(
             "Primary tutorial analysis: z_t=(S_t,R_t,d_t,κ_t,u_t), where S_t=1-C_t is Contextual "
@@ -4631,7 +4616,7 @@ Ct_smooth = smooth_coherence(
 Ct_smooth = np.clip(Ct_smooth, 0.0, 1.0)
 
 # ============================
-# IC-III => IC-II (driver/lag)
+# IC-III => IC-II (geometry)
 # ============================
 ic3 = compute_ic3_geometry(E=E)
 
@@ -4749,7 +4734,6 @@ crossdim = compute_cross_dimensional_analysis(
     kappa=df_out["kappa_t"].to_numpy(dtype=float),
     u=df_out["u_t"].to_numpy(dtype=float),
     rolling_window=int(crossdim_window),
-    max_lag=int(crossdim_max_lag),
 )
 
 # First differences
@@ -4765,6 +4749,9 @@ for name, col in change_col_map.items():
 
 # Secondary movement summaries
 df_out["J_t"] = crossdim["J_t"]
+df_out["v_info_t"] = crossdim["v_info_t"]
+df_out["tau_info_t"] = crossdim["tau_info_t"]
+df_out["v_rel_t"] = crossdim["v_rel_t"]
 for name, col in {
     "S": "J_share_S",
     "R": "J_share_R",
@@ -4773,6 +4760,15 @@ for name, col in {
     "u": "J_share_u",
 }.items():
     df_out[col] = crossdim["shares"][name]
+
+for name, col in {
+    "S": "Vrel_share_S",
+    "R": "Vrel_share_R",
+    "d": "Vrel_share_d",
+    "kappa": "Vrel_share_kappa",
+    "u": "Vrel_share_u",
+}.items():
+    df_out[col] = crossdim["relative_shares"][name]
 
 for name, col in {
     "S": "dir_S",
@@ -5722,7 +5718,9 @@ cols_order = [
     "Ct", "Ct_im", "C_inv", *ci_cols,
     "S_t", "R_t", "d_t", "kappa_t", "u_t",
     "dS_t", "dR_t", "dd_t", "dkappa_t", "du_t",
-    "J_t", "J_share_S", "J_share_R", "J_share_d", "J_share_kappa", "J_share_u",
+    "J_t", "v_info_t", "tau_info_t", "v_rel_t",
+    "J_share_S", "J_share_R", "J_share_d", "J_share_kappa", "J_share_u",
+    "Vrel_share_S", "Vrel_share_R", "Vrel_share_d", "Vrel_share_kappa", "Vrel_share_u",
     "Q_t", "rho_t", "D_t_exploratory",
 ]
 cols_show = [c for c in cols_order if c in df_out.columns]
@@ -5730,8 +5728,12 @@ st.dataframe(df_out[cols_show], use_container_width=True)
 st.caption(
     "Primary turn-level state: z_t=(S_t,R_t,d_t,κ_t,u_t). S_t=1-C_t is Contextual Discontinuity; "
     "R_t=1-C_inv is Structural Instability / low persistence; d_t is angular displacement; κ_t is "
-    "turning-angle curvature; and u_t=1-ρ_t is local semantic dispersion. D_t_exploratory is retained "
-    "only for backwards-compatible diagnostics and is not used in the primary multivariate analysis."
+    "turning-angle curvature; and u_t=1-ρ_t is local semantic dispersion. v_info_t=||Δz_t||₂ is the raw "
+    "five-dimensional informational velocity and tau_info_t is its cumulative path length from the first fully "
+    "observed 5D state. v_rel_t is a retrospective robust-scale-adjusted movement diagnostic that reduces domination "
+    "by intrinsically high-variance coordinates; it does not redefine tau_info_t. D_t_exploratory is retained only "
+    "for backwards-compatible diagnostics and is not used "
+    "in the primary multivariate analysis."
 )
 
 # =========================================================
@@ -5761,8 +5763,8 @@ if show_crossdim:
                 "Enable C_inv and use a dialogue long enough to fill the structural window."
             )
 
-        tab_dyn, tab_dep, tab_lag = st.tabs([
-            "State & Change", "Dynamic Coupling", "Lead–Lag"
+        tab_dyn, tab_dep = st.tabs([
+            "State & Change", "Dynamic Coupling"
         ])
 
         with tab_dyn:
@@ -5832,6 +5834,72 @@ if show_crossdim:
                 "not as a transition detector."
             )
 
+            fig_tau = go.Figure()
+            fig_tau.add_trace(go.Scatter(
+                x=x_cd, y=np.asarray(df_out["v_info_t"], float), mode="lines",
+                name="v_info(t) — informational velocity"
+            ))
+            fig_tau.add_trace(go.Scatter(
+                x=x_cd, y=np.asarray(df_out["tau_info_t"], float), mode="lines",
+                name="τ_info(t) — cumulative informational time", yaxis="y2"
+            ))
+            fig_tau.update_layout(
+                title="Informational time from the five-dimensional state trajectory",
+                xaxis_title="Turn",
+                yaxis=dict(title="v_info(t) = ||Δz_t||₂", rangemode="tozero"),
+                yaxis2=dict(
+                    title="τ_info(t) — cumulative path length",
+                    overlaying="y", side="right", rangemode="tozero"
+                ),
+                height=390,
+                margin=dict(l=40, r=80, t=55, b=40),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            )
+            st.plotly_chart(fig_tau, use_container_width=True)
+            st.caption(
+                "Informational velocity v_info(t)=||z_t-z_(t-1)||₂ is the raw Euclidean step length of the complete "
+                "state z_t=(S_t,R_t,d_t,κ_t,u_t). Informational time τ_info(t)=Σv_info is the cumulative path length "
+                "traversed through that state space. It starts at 0 only once all five coordinates are available; "
+                "earlier turns are left undefined rather than imputing R_t during the C_inv warm-up. This is an "
+                "exploratory operationalization of informational time, not chronological time or a transition detector."
+            )
+
+            fig_v_rel = go.Figure()
+            fig_v_rel.add_trace(go.Scatter(
+                x=x_cd, y=np.asarray(df_out["v_rel_t"], float), mode="lines",
+                name="v_rel(t) — variability-adjusted movement"
+            ))
+            fig_v_rel.update_layout(
+                title="Variability-adjusted multivariate velocity",
+                xaxis_title="Turn", yaxis_title="v_rel(t) — robust-scale RMS",
+                yaxis=dict(rangemode="tozero"), height=360,
+                margin=dict(l=40, r=40, t=45, b=40),
+            )
+            st.plotly_chart(fig_v_rel, use_container_width=True)
+            st.caption(
+                "v_rel(t) rescales each component change by that component's robust within-dialogue variability "
+                "before combining the five standardized changes as an RMS magnitude. This asks whether movement is "
+                "large relative to each coordinate's own baseline dynamics, so a naturally volatile R_t cannot dominate "
+                "solely because its raw range is larger. The calibration uses the full dialogue and is therefore "
+                "retrospective/offline; it is a diagnostic for analysis, not an online transition detector."
+            )
+
+            scale_rows = []
+            pretty_scale_names = {"S": "ΔS", "R": "ΔR", "d": "Δd", "kappa": "Δκ", "u": "Δu"}
+            for key in ["S", "R", "d", "kappa", "u"]:
+                scale_rows.append({
+                    "Component change": pretty_scale_names[key],
+                    "Robust scale": float(crossdim["change_scales"][key])
+                    if np.isfinite(crossdim["change_scales"][key]) else np.nan,
+                })
+            st.markdown("#### Variability calibration used by v_rel(t)")
+            st.dataframe(pd.DataFrame(scale_rows), use_container_width=True, hide_index=True)
+            st.caption(
+                "Primary scale = 1.4826 × MAD of the component's valid first differences. If MAD is effectively "
+                "zero, the implementation falls back to RMS about zero; a completely flat component receives "
+                "scale 1 so its standardized changes remain exactly zero."
+            )
+
             fig_J_comp = go.Figure()
             for col, label in [
                 ("J_share_S", "S contribution"), ("J_share_R", "R contribution"),
@@ -5850,9 +5918,33 @@ if show_crossdim:
             )
             st.plotly_chart(fig_J_comp, use_container_width=True)
             st.caption(
-                "These shares identify which coordinate produced each non-zero 5D movement. They prevent a high J_t "
-                "from hiding whether the movement was primarily contextual, structural, displacement-based, curvature-based, "
-                "or dispersion-based. Shares are undefined when total movement is exactly zero."
+                "These raw shares identify which coordinate produced each non-zero Euclidean 5D movement. Because they "
+                "use squared raw changes, a coordinate with greater baseline variability can dominate this composition. "
+                "Use the variability-adjusted composition below to check whether that dominance survives calibration."
+            )
+
+            fig_rel_comp = go.Figure()
+            for col, label in [
+                ("Vrel_share_S", "S relative contribution"), ("Vrel_share_R", "R relative contribution"),
+                ("Vrel_share_d", "d relative contribution"), ("Vrel_share_kappa", "κ relative contribution"),
+                ("Vrel_share_u", "u relative contribution"),
+            ]:
+                fig_rel_comp.add_trace(go.Scatter(
+                    x=x_cd, y=np.asarray(df_out[col], float), mode="lines",
+                    stackgroup="relative_movement", name=label
+                ))
+            fig_rel_comp.update_layout(
+                title="Composition of variability-adjusted movement",
+                xaxis_title="Turn", yaxis_title="Share of standardized squared change",
+                yaxis=dict(range=[0, 1]), height=390,
+                margin=dict(l=40, r=40, t=45, b=40),
+            )
+            st.plotly_chart(fig_rel_comp, use_container_width=True)
+            st.caption(
+                "Relative shares are computed after dividing each component change by its own robust variability scale. "
+                "If R still dominates here, its change is large relative to R's usual variation; if its dominance disappears, "
+                "the raw result was largely a scale/variance effect. This is the preferred composition check for the "
+                "Research Tutorial's multivariate temporal analysis."
             )
 
         with tab_dep:
@@ -5913,55 +6005,7 @@ if show_crossdim:
                     "next. It is a second-order exploratory descriptor, not a primary transition metric."
                 )
 
-        with tab_lag:
-            st.caption(
-                "Lead–lag is evaluated on first differences. The table corrects the retrospective search over candidate "
-                "lags with a max-over-lags circular-shift null, then applies Holm adjustment across the ten pairwise tests. "
-                "These remain descriptive temporal associations, not causal estimates."
-            )
-            lag_tables = crossdim["lag_changes"]
-            lag_null_summary = crossdim["lag_null_summary"].copy()
-            lag_options = list(lag_tables.keys())
-            default_lags = lag_options[:6]
-            selected_lags = st.multiselect(
-                "Pairs shown in lead–lag plot",
-                options=lag_options,
-                default=default_lags,
-                key="leadlag_pairs_5d",
-            )
-            fig_lag = go.Figure()
-            for pair_name in selected_lags:
-                lag_df = lag_tables[pair_name]
-                fig_lag.add_trace(go.Scatter(
-                    x=lag_df["lag"], y=lag_df["corr"], mode="lines+markers", name=pair_name
-                ))
-            fig_lag.update_layout(
-                title="Lead–lag association among first differences",
-                xaxis_title="Lag (turns)", yaxis_title="Pearson r", yaxis=dict(range=[-1, 1]),
-                height=460, margin=dict(l=40, r=40, t=45, b=40),
-            )
-            st.plotly_chart(fig_lag, use_container_width=True)
-            st.caption(
-                "Positive lag means the first named change precedes the second; negative lag means the reverse. The raw "
-                "best lag should never be interpreted alone because the analysis searches several candidate lags."
-            )
 
-            st.markdown("#### Strongest lag with search and family-wise correction")
-            lag_cols = [
-                "pair", "best_lag", "corr", "abs_corr", "n_pairs",
-                "null_mean_max_abs_r", "null_q95_max_abs_r",
-                "p_max_over_lags", "p_holm", "null_n",
-            ]
-            lag_show = lag_null_summary[[c for c in lag_cols if c in lag_null_summary.columns]].copy()
-            st.dataframe(lag_show, use_container_width=True, hide_index=True)
-            st.caption(
-                "p_max_over_lags controls the search across lags within each pair. p_holm additionally controls family-wise "
-                "error across the ten tested dimension pairs. Different coordinates also have different intrinsic temporal "
-                "response properties, so any proposed sequence should still be checked with synthetic latency calibration."
-            )
-
-
-st.session_state["last_main_fig"] = fig_main
 st.session_state["last_main_fig"] = fig_main
 html = fig_main.to_html(full_html=True, include_plotlyjs="cdn").encode("utf-8")
 st.download_button(
@@ -6031,19 +6075,6 @@ with st.expander("Exploratory / implementation diagnostics", expanded=False):
             "and implementation behaviour, not for defining transition onsets."
         )
 
-    fig_g = plot_ic3_geometry(
-        d_i=d_i,
-        kappa_i=kappa_i,
-        u_t=u_t,
-        height=560,
-    )
-    st.plotly_chart(fig_g, use_container_width=True)
-    st.caption(
-        "These are the exact three geometric coordinates used separately in the primary state: d_t is causal angular "
-        "displacement, κ_t is causal turning-angle curvature, and u_t=1-ρ_t is causal local semantic dispersion over a "
-        f"trailing {GEOM_COMPACTNESS_WINDOW + 1}-turn neighbourhood. No dialogue-wise calibration or composite weighting "
-        "is applied to these primary coordinates. The legacy D_t summary is intentionally omitted from this figure."
-    )
 
 
 def _df_to_csv_bytes(d: pd.DataFrame) -> bytes:
@@ -6085,7 +6116,6 @@ report_params = {
     "ci_method": ci_method,
     "ci_alpha": float(ci_alpha),
     "crossdim_window": int(crossdim_window),
-    "crossdim_max_lag": int(crossdim_max_lag),
     "primary_state": "S/R/d/kappa/u",
     "geometry_composite_primary": False,
     "geom_compactness_window": int(GEOM_COMPACTNESS_WINDOW),
